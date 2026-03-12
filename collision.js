@@ -46,6 +46,27 @@ export function checkPlayerCarNpcCollision() {
       commitCrime();
     }
   }
+
+  // Also check gang NPCs
+  for (const gnpc of state.gangNpcs) {
+    if (gnpc.dead) continue;
+    if (gnpc.ragdoll && gnpc.ragdoll.active) continue;
+
+    const dx = gnpc.x - v.x;
+    const dz = gnpc.z - v.z;
+    const dist = Math.sqrt(dx * dx + dz * dz);
+
+    if (dist < 3.2) {
+      gnpc.dead = true;
+      gnpc.mesh.rotation.x = Math.PI / 2;
+      gnpc.respawnTimer = 15;
+      setTimeout(() => { gnpc.mesh.visible = false; }, 1000);
+      v.speed *= 0.9;
+      state.cameraShake.intensity = 0.8;
+      state.cameraShake.timer = 0.5;
+      commitCrime();
+    }
+  }
 }
 
 // ── Car vs Car Collision ────────────────────────────────────────────────
@@ -54,7 +75,7 @@ export function checkCarCarCollisions() {
   const v = state.currentVehicle;
   if (v.isExploded) return;
 
-  const allAICars = [...state.trafficCars, ...state.policeCars];
+  const allAICars = [...state.trafficCars, ...state.policeCars, ...state.vehicles];
 
   for (const other of allAICars) {
     if (other === v) continue;

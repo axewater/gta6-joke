@@ -172,6 +172,17 @@ export function updateMinimap() {
     }
   }
 
+  // Gang NPCs — drawn with their gang color
+  for (const gnpc of state.gangNpcs) {
+    if (gnpc.dead) continue;
+    const gx = (gnpc.x - px) * scale, gz = (gnpc.z - pz) * scale;
+    if (Math.abs(gx) < size / 2 && Math.abs(gz) < size / 2) {
+      const gangColor = gnpc.gangIndex === 0 ? '#ff2222' : '#22ff22';
+      ctx.fillStyle = gangColor;
+      ctx.beginPath(); ctx.arc(gx, gz, 2, 0, Math.PI * 2); ctx.fill();
+    }
+  }
+
   ctx.restore();
 
   ctx.fillStyle = '#ffffff';

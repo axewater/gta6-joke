@@ -3,7 +3,6 @@ import { scene } from './renderer.js';
 import { state } from './state.js';
 import {
   GRAVITY, PLAYER_SPEED, SPRINT_MULT, JUMP_FORCE,
-  CAR_MAX_SPEED, CAR_ACCEL, CAR_BRAKE, CAR_FRICTION, CAR_TURN,
   RADIO_STATIONS, HALF_CITY, CAR_BUILDING_DAMAGE_MIN_SPEED, CAR_BUILDING_DAMAGE_MULT
 } from './constants.js';
 import { collideAABB } from './physics.js';
@@ -122,23 +121,41 @@ export function updateVehicle(dt) {
   if (v.isExploded) return;
   const k = state.keys;
 
-  if (k['KeyW']) v.speed = Math.min(v.speed + CAR_ACCEL * dt, CAR_MAX_SPEED);
-  else if (k['KeyS']) v.speed = Math.max(v.speed - CAR_BRAKE * dt, -CAR_MAX_SPEED * 0.4);
+  // Use per-vehicle physics
+  const vMaxSpeed = v.maxSpeed;
+  const vAccel = v.accel;
+  const vBrake = v.brake;
+  const vFriction = v.friction;
+  const vTurn = v.turnRate;
+  const vGrip = v.grip;
+
+  if (k['KeyW']) v.speed = Math.min(v.speed + vAccel * dt, vMaxSpeed);
+  else if (k['KeyS']) v.speed = Math.max(v.speed - vBrake * dt, -vMaxSpeed * 0.4);
   else {
     if (Math.abs(v.speed) < 0.5) v.speed = 0;
-    else v.speed -= Math.sign(v.speed) * CAR_FRICTION * dt;
+    else v.speed -= Math.sign(v.speed) * vFriction * dt;
   }
 
   if (Math.abs(v.speed) > 0.5) {
-    const turnFactor = CAR_TURN * (v.speed / CAR_MAX_SPEED);
+    const turnFactor = vTurn * (v.speed / vMaxSpeed);
     if (k['KeyA']) v.rotation += turnFactor * dt;
     if (k['KeyD']) v.rotation -= turnFactor * dt;
   }
 
   const impactSpeed = Math.abs(v.speed);
 
-  v.x += Math.sin(v.rotation) * v.speed * dt;
-  v.z += Math.cos(v.rotation) * v.speed * dt;
+  // Drift mechanic — velocity angle lags behind facing angle based on grip
+  if (v.velocityAngle === undefined) v.velocityAngle = v.rotation;
+
+  let angleDiff = v.rotation - v.velocityAngle;
+  while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
+  while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
+
+  const gripLerp = 1 - Math.pow(1 - vGrip, dt * 10);
+  v.velocityAngle += angleDiff * gripLerp;
+
+  v.x += Math.sin(v.velocityAngle) * v.speed * dt;
+  v.z += Math.cos(v.velocityAngle) * v.speed * dt;
 
   // Player vehicle skips ramp AABBs (drives over them)
   const corrected = collideAABB(v.x, v.z, v.halfW, v.halfD, true);
@@ -235,10 +252,11 @@ export function updateVehicle(dt) {
     for (const w of v.wheels) w.rotation.x += wheelSpin;
   }
 
-  // Tire smoke on hard braking or sharp turning
+  // Tire smoke on hard braking, sharp turning, or drifting
   const isBraking = k['KeyS'] && Math.abs(v.speed) > 8;
   const isTurning = (k['KeyA'] || k['KeyD']) && Math.abs(v.speed) > 12;
-  if ((isBraking || isTurning) && !v.airborne && Math.random() < 0.3) {
+  const isDrifting = Math.abs(angleDiff) > 0.15 && Math.abs(v.speed) > 10;
+  if ((isBraking || isTurning || isDrifting) && !v.airborne && Math.random() < (isDrifting ? 0.6 : 0.3)) {
     const sinR = Math.sin(v.rotation);
     const cosR = Math.cos(v.rotation);
     const rearX = v.x - sinR * 2;
@@ -357,6 +375,25 @@ export function handlePunch() {
       }
     }
   }
+
+  // Also check gang NPCs for punch
+  let closestGang = null, closestGangDist = 2.5;
+  for (const gnpc of state.gangNpcs) {
+    if (gnpc.dead) continue;
+    if (gnpc.ragdoll && gnpc.ragdoll.active) continue;
+    const dx = gnpc.x - p.x, dz = gnpc.z - p.z;
+    const dist = Math.sqrt(dx * dx + dz * dz);
+    if (dist > closestGangDist) continue;
+    const dot = fwd.x * (dx / dist) + fwd.z * (dz / dist);
+    if (dot > 0.3) { closestGangDist = dist; closestGang = gnpc; }
+  }
+  if (closestGang) {
+    closestGang.dead = true;
+    closestGang.mesh.rotation.x = Math.PI / 2;
+    closestGang.respawnTimer = 15;
+    registerCivilianKill();
+    setTimeout(() => { closestGang.mesh.visible = false; }, 1000);
+  }
 }
 
 // ── Shoot ───────────────────────────────────────────────────────────────
@@ -415,6 +452,23 @@ export function updateBullets(dt) {
         scene.remove(cop.mesh); state.policeOfficers.splice(j, 1);
         scene.remove(b.mesh); state.playerBullets.splice(i, 1);
         registerPoliceKill(); break;
+      }
+    }
+
+    // Hit gang NPCs
+    if (state.playerBullets[i]) { // still alive after police check
+      for (const gnpc of state.gangNpcs) {
+        if (gnpc.dead) continue;
+        if (gnpc.ragdoll && gnpc.ragdoll.active) continue;
+        const dx = gnpc.x - b.x, dz = gnpc.z - b.z;
+        if (dx * dx + dz * dz < 2) {
+          gnpc.dead = true;
+          gnpc.mesh.rotation.x = Math.PI / 2;
+          gnpc.respawnTimer = 15;
+          setTimeout(() => { gnpc.mesh.visible = false; }, 1000);
+          scene.remove(b.mesh); state.playerBullets.splice(i, 1);
+          registerCivilianKill(); break;
+        }
       }
     }
   }
@@ -496,7 +550,8 @@ export function updateDeath(dt) {
       state.policeOfficers = [];
       for (const b of state.playerBullets) scene.remove(b.mesh);
       for (const b of state.policeBullets) scene.remove(b.mesh);
-      state.playerBullets = []; state.policeBullets = [];
+      for (const b of state.gangBullets) scene.remove(b.mesh);
+      state.playerBullets = []; state.policeBullets = []; state.gangBullets = [];
       if (state.helicopter) {
         scene.remove(state.helicopter.mesh);
         for (const m of state.helicopter.missiles) scene.remove(m.mesh);

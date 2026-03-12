@@ -82,4 +82,9 @@ export const state = {
   // Road material refs for rain toggle
   roadMaterial: null,
   puddleMaterial: null,
+  // Restaurant seats
+  restaurantSeats: [],
+  // Gang system
+  gangNpcs: [],
+  gangBullets: [],
 };

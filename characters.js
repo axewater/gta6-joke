@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { scene } from './renderer.js';
 import { state } from './state.js';
-import { GRID, CELL, HALF_CITY, ROAD, TROPICAL_OUTFIT_COLORS, SKIN_TONES } from './constants.js';
+import { GRID, CELL, HALF_CITY, ROAD, TROPICAL_OUTFIT_COLORS, SKIN_TONES, NPC_COUNT, GANG_ZONES, GANG_NPC_PER_ZONE } from './constants.js';
 import { randomSidewalkPos } from './city.js';
 
 // ── Character Head helper ──────────────────────────────────────────────
@@ -142,7 +142,7 @@ export function createPlayer() {
 
 // ── NPCs ──────────────────────────────────────────────────────────────
 export function createNPCs() {
-  for (let i = 0; i < 50; i++) {
+  for (let i = 0; i < NPC_COUNT; i++) {
     const root = new THREE.Group();
 
     const outfitColor = TROPICAL_OUTFIT_COLORS[Math.floor(Math.random() * TROPICAL_OUTFIT_COLORS.length)];
@@ -178,6 +178,7 @@ export function createNPCs() {
       dir = Math.random() > 0.5 ? Math.PI / 2 : -Math.PI / 2;
     }
 
+    nz = Math.min(nz, HALF_CITY - 2);
     root.position.set(nx, 0, nz);
     root.rotation.y = dir;
     scene.add(root);
@@ -195,8 +196,75 @@ export function createNPCs() {
       respawnTimer: 0,
       horizontal,
       aggressive: false,
-      aggroTimer: 0
+      aggroTimer: 0,
+      isSitting: false,
+      sitTimer: 0,
+      seatIndex: -1
     });
+  }
+}
+
+// ── Gang NPC ──────────────────────────────────────────────────────────
+function createGangNPC(x, z, gangInfo, gangIndex) {
+  const root = new THREE.Group();
+
+  const skinColor = SKIN_TONES[Math.floor(Math.random() * SKIN_TONES.length)];
+  const pantsColor = 0x1a1a1a + Math.floor(Math.random() * 0x111111);
+
+  const body = createCharacterBody(gangInfo.shirtColor, pantsColor);
+  root.add(body.group);
+
+  const headGroup = createCharacterHead(skinColor, {
+    hat: false, sunglasses: Math.random() < 0.5,
+    glassColor: gangInfo.shirtColor
+  });
+  headGroup.position.set(0, 1.95, 0);
+  root.add(headGroup);
+
+  // Bandana on head
+  const bandanaMat = new THREE.MeshStandardMaterial({ color: gangInfo.shirtColor });
+  const bandana = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.2, 0.7), bandanaMat);
+  bandana.position.set(0, 2.3, 0);
+  root.add(bandana);
+
+  // Gun in hand
+  const gunMat = new THREE.MeshStandardMaterial({ color: 0x222222 });
+  const gun = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 0.5), gunMat);
+  gun.position.set(0.55, 1.1, 0.3);
+  root.add(gun);
+
+  root.position.set(x, 0, z);
+  scene.add(root);
+
+  return {
+    mesh: root,
+    x, z,
+    leftLeg: body.leftLeg, rightLeg: body.rightLeg,
+    legPhase: Math.random() * Math.PI * 2,
+    speed: 4 + Math.random(),
+    gangIndex,
+    shootTimer: 1 + Math.random() * 2,
+    ambientTimer: 5 + Math.random() * 10,
+    patrolDir: Math.random() * Math.PI * 2,
+    patrolDist: 0,
+    patrolMax: 15 + Math.random() * 20,
+    dead: false,
+    respawnTimer: 0,
+    alive: true
+  };
+}
+
+export function createGangNPCs() {
+  for (let gi = 0; gi < GANG_ZONES.length; gi++) {
+    const gang = GANG_ZONES[gi];
+    for (let i = 0; i < GANG_NPC_PER_ZONE; i++) {
+      // Pick random cell from this gang's territory
+      const cell = gang.cells[Math.floor(Math.random() * gang.cells.length)];
+      const cx = -HALF_CITY + cell[1] * CELL + ROAD / 2 + Math.random() * (CELL - ROAD);
+      const cz = -HALF_CITY + cell[0] * CELL + ROAD / 2 + Math.random() * (CELL - ROAD);
+      const gnpc = createGangNPC(cx, Math.min(cz, HALF_CITY - 2), gang, gi);
+      state.gangNpcs.push(gnpc);
+    }
   }
 }
 

@@ -1,14 +1,18 @@
 import * as THREE from 'three';
 import { scene } from './renderer.js';
 import { state } from './state.js';
-import { GRID, CELL, HALF_CITY, ROAD } from './constants.js';
+import { GRID, CELL, HALF_CITY, ROAD, GANG_ZONES, GANG_SHOOT_COOLDOWN } from './constants.js';
 import { collideAABB, triggerRagdoll } from './physics.js';
 import { createPoliceOfficer } from './characters.js';
 import { createPoliceCar, createTank } from './vehicles.js';
 import { randomSidewalkPos } from './city.js';
+import { launchNpcRagdoll } from './npc-ragdoll.js';
 
 // ── NPC AI ────────────────────────────────────────────────────────────
 export function updateNPCs(dt) {
+  const playerX = state.isInVehicle ? state.currentVehicle.x : state.player.x;
+  const playerZ = state.isInVehicle ? state.currentVehicle.z : state.player.z;
+
   for (const npc of state.npcs) {
     if (!npc.alive) {
       if (npc.ragdoll && npc.ragdoll.active) continue; // ragdoll handles movement
@@ -16,12 +20,38 @@ export function updateNPCs(dt) {
       if (npc.respawnTimer <= 0) {
         npc.alive = true;
         npc.aggressive = false;
+        npc.isSitting = false;
         npc.mesh.visible = true;
         npc.mesh.rotation.x = 0;
+        npc.mesh.rotation.z = 0;
         const pos = randomSidewalkPos();
         npc.x = pos.x; npc.z = pos.z;
         npc.mesh.position.set(npc.x, 0, npc.z);
       }
+      continue;
+    }
+
+    // Seated NPC — skip all movement/collision
+    if (npc.isSitting) {
+      npc.sitTimer -= dt;
+      if (npc.sitTimer <= 0) {
+        npc.isSitting = false;
+        if (npc.seatIndex >= 0 && npc.seatIndex < state.restaurantSeats.length) {
+          state.restaurantSeats[npc.seatIndex].occupied = false;
+        }
+        npc.seatIndex = -1;
+        // Stop leg animation
+        npc.leftLeg.rotation.x = 0;
+        npc.rightLeg.rotation.x = 0;
+      }
+      continue;
+    }
+
+    // Distance-based throttling: far NPCs update at ~7.5Hz
+    const mdx = Math.abs(npc.x - playerX);
+    const mdz = Math.abs(npc.z - playerZ);
+    if (mdx + mdz > 200 && state.frameCount % 8 !== 0) {
+      npc.mesh.position.set(npc.x, 0, npc.z);
       continue;
     }
 
@@ -60,13 +90,38 @@ export function updateNPCs(dt) {
       const c = collideAABB(npc.x, npc.z, 0.4, 0.3);
       npc.x = c.x; npc.z = c.z;
       npc.mesh.rotation.y = npc.direction;
+
+      // Chance to sit at a nearby restaurant seat
+      if (state.restaurantSeats.length > 0 && Math.random() < 0.001) {
+        for (let si = 0; si < state.restaurantSeats.length; si++) {
+          const seat = state.restaurantSeats[si];
+          if (seat.occupied) continue;
+          const sdx = seat.x - npc.x, sdz = seat.z - npc.z;
+          if (sdx * sdx + sdz * sdz < 225) { // within 15 units
+            seat.occupied = true;
+            npc.isSitting = true;
+            npc.sitTimer = 30 + Math.random() * 30;
+            npc.seatIndex = si;
+            npc.x = seat.x;
+            npc.z = seat.z;
+            // Face the table
+            npc.mesh.rotation.y = Math.atan2(seat.tableX - seat.x, seat.tableZ - seat.z);
+            npc.leftLeg.rotation.x = -0.8; // sitting pose
+            npc.rightLeg.rotation.x = -0.8;
+            break;
+          }
+        }
+      }
     }
 
-    // Wrap
+    // Wrap — but clamp south boundary to prevent beach/sea
     if (npc.x < -HALF_CITY - 10) npc.x = HALF_CITY + 5;
     if (npc.x > HALF_CITY + 10) npc.x = -HALF_CITY - 5;
     if (npc.z < -HALF_CITY - 10) npc.z = HALF_CITY + 5;
-    if (npc.z > HALF_CITY + 10) npc.z = -HALF_CITY - 5;
+    if (npc.z > HALF_CITY - 2) {
+      npc.direction += Math.PI;
+      npc.z = HALF_CITY - 2;
+    }
 
     npc.mesh.position.set(npc.x, 0, npc.z);
 
@@ -161,11 +216,14 @@ export function updateTrafficCars(dt) {
       car.rotation += PI / 2;
     }
 
-    // Wrap
+    // Wrap — clamp south to prevent beach driving
     if (car.x < -HALF_CITY - 20) car.x = HALF_CITY + 10;
     if (car.x > HALF_CITY + 20) car.x = -HALF_CITY - 10;
     if (car.z < -HALF_CITY - 20) car.z = HALF_CITY + 10;
-    if (car.z > HALF_CITY + 20) car.z = -HALF_CITY - 10;
+    if (car.z > HALF_CITY - 2) {
+      car.rotation += Math.PI;
+      car.z = HALF_CITY - 2;
+    }
 
     car.mesh.position.set(car.x, 0, car.z);
     car.mesh.rotation.y = car.rotation;
@@ -392,6 +450,209 @@ export function updatePoliceOfficers(dt) {
         dx: bDir.x * 50, dy: 0, dz: bDir.z * 50,
         life: 1.5
       });
+    }
+  }
+}
+
+// ── Helper: check if world coords are in a gang zone ─────────────────
+function isInGangZone(x, z, gangIndex) {
+  const col = Math.floor((x + HALF_CITY) / CELL);
+  const row = Math.floor((z + HALF_CITY) / CELL);
+  const cells = GANG_ZONES[gangIndex].cells;
+  for (const [r, c] of cells) {
+    if (r === row && c === col) return true;
+  }
+  return false;
+}
+
+// ── Gang cell bounding box helper ────────────────────────────────────
+function getGangZoneBounds(gangIndex) {
+  const cells = GANG_ZONES[gangIndex].cells;
+  let minR = 99, maxR = 0, minC = 99, maxC = 0;
+  for (const [r, c] of cells) {
+    if (r < minR) minR = r;
+    if (r > maxR) maxR = r;
+    if (c < minC) minC = c;
+    if (c > maxC) maxC = c;
+  }
+  return {
+    minX: -HALF_CITY + minC * CELL,
+    maxX: -HALF_CITY + (maxC + 1) * CELL,
+    minZ: -HALF_CITY + minR * CELL,
+    maxZ: Math.min(-HALF_CITY + (maxR + 1) * CELL, HALF_CITY - 2),
+  };
+}
+
+// Shared bullet geometry/material for gang bullets
+const gangBulletGeo = new THREE.SphereGeometry(0.08, 4, 4);
+const gangBulletMat = new THREE.MeshBasicMaterial({ color: 0xFF4400 });
+
+// ── Gang NPC AI ──────────────────────────────────────────────────────
+export function updateGangNPCs(dt) {
+  const playerX = state.isInVehicle ? state.currentVehicle.x : state.player.x;
+  const playerZ = state.isInVehicle ? state.currentVehicle.z : state.player.z;
+
+  for (const gnpc of state.gangNpcs) {
+    // Respawn if dead
+    if (gnpc.dead) {
+      gnpc.respawnTimer -= dt;
+      if (gnpc.respawnTimer <= 0) {
+        gnpc.dead = false;
+        gnpc.mesh.visible = true;
+        gnpc.mesh.rotation.x = 0;
+        gnpc.mesh.rotation.z = 0;
+        const bounds = getGangZoneBounds(gnpc.gangIndex);
+        gnpc.x = bounds.minX + Math.random() * (bounds.maxX - bounds.minX);
+        gnpc.z = bounds.minZ + Math.random() * (bounds.maxZ - bounds.minZ);
+        gnpc.z = Math.min(gnpc.z, HALF_CITY - 2);
+        gnpc.mesh.position.set(gnpc.x, 0, gnpc.z);
+      }
+      continue;
+    }
+    if (gnpc.ragdoll && gnpc.ragdoll.active) continue;
+
+    const gang = GANG_ZONES[gnpc.gangIndex];
+    const dx = playerX - gnpc.x, dz = playerZ - gnpc.z;
+    const distToPlayer = Math.sqrt(dx * dx + dz * dz);
+
+    // Check if player is in this gang's zone
+    const playerInZone = isInGangZone(playerX, playerZ, gnpc.gangIndex);
+
+    if (playerInZone && distToPlayer < gang.aggroRange) {
+      // Chase player
+      if (distToPlayer > 3) {
+        const nx = dx / distToPlayer, nz = dz / distToPlayer;
+        gnpc.x += nx * gnpc.speed * dt;
+        gnpc.z += nz * gnpc.speed * dt;
+        const c = collideAABB(gnpc.x, gnpc.z, 0.4, 0.3);
+        gnpc.x = c.x; gnpc.z = c.z;
+        gnpc.mesh.rotation.y = Math.atan2(dx, dz);
+      } else if (!state.isInVehicle && !state.ragdoll.active && !state.isDead) {
+        state.health -= 12 * dt;
+      }
+
+      // Shoot at player
+      gnpc.shootTimer -= dt;
+      if (gnpc.shootTimer <= 0 && distToPlayer < gang.shootRange && distToPlayer > 4 && state.gangBullets.length < 15) {
+        gnpc.shootTimer = GANG_SHOOT_COOLDOWN + Math.random() * 0.5;
+        const bullet = new THREE.Mesh(gangBulletGeo, gangBulletMat);
+        bullet.position.set(gnpc.x, 1.3, gnpc.z);
+        scene.add(bullet);
+        const bDir = { x: dx / distToPlayer + (Math.random() - 0.5) * 0.2, z: dz / distToPlayer + (Math.random() - 0.5) * 0.2 };
+        state.gangBullets.push({
+          mesh: bullet, x: gnpc.x, y: 1.3, z: gnpc.z,
+          dx: bDir.x * 50, dy: 0, dz: bDir.z * 50,
+          life: 1.5, gangIndex: gnpc.gangIndex
+        });
+      }
+    } else {
+      // Patrol within zone
+      const fx = -Math.sin(gnpc.patrolDir) * gnpc.speed * 0.5 * dt;
+      const fz = -Math.cos(gnpc.patrolDir) * gnpc.speed * 0.5 * dt;
+      gnpc.x += fx; gnpc.z += fz;
+      gnpc.patrolDist += gnpc.speed * 0.5 * dt;
+
+      if (gnpc.patrolDist >= gnpc.patrolMax) {
+        gnpc.patrolDist = 0;
+        gnpc.patrolMax = 15 + Math.random() * 20;
+        gnpc.patrolDir += (Math.random() - 0.5) * Math.PI;
+      }
+
+      // Keep within zone bounds
+      const bounds = getGangZoneBounds(gnpc.gangIndex);
+      if (gnpc.x < bounds.minX + 3) { gnpc.x = bounds.minX + 3; gnpc.patrolDir += Math.PI; }
+      if (gnpc.x > bounds.maxX - 3) { gnpc.x = bounds.maxX - 3; gnpc.patrolDir += Math.PI; }
+      if (gnpc.z < bounds.minZ + 3) { gnpc.z = bounds.minZ + 3; gnpc.patrolDir += Math.PI; }
+      if (gnpc.z > bounds.maxZ - 3) { gnpc.z = bounds.maxZ - 3; gnpc.patrolDir += Math.PI; }
+
+      const c = collideAABB(gnpc.x, gnpc.z, 0.4, 0.3);
+      gnpc.x = c.x; gnpc.z = c.z;
+      gnpc.mesh.rotation.y = gnpc.patrolDir;
+
+      // Ambient violence: occasionally shoot at nearby civilian NPCs
+      gnpc.ambientTimer -= dt;
+      if (gnpc.ambientTimer <= 0 && state.gangBullets.length < 15) {
+        gnpc.ambientTimer = 5 + Math.random() * 10;
+        let closestNpc = null, closestDist = 20;
+        for (const npc of state.npcs) {
+          if (!npc.alive || npc.isSitting) continue;
+          const ndx = npc.x - gnpc.x, ndz = npc.z - gnpc.z;
+          const nd = Math.sqrt(ndx * ndx + ndz * ndz);
+          if (nd < closestDist) { closestDist = nd; closestNpc = npc; }
+        }
+        if (closestNpc) {
+          const ndx = closestNpc.x - gnpc.x, ndz = closestNpc.z - gnpc.z;
+          const nd = Math.sqrt(ndx * ndx + ndz * ndz);
+          const bullet = new THREE.Mesh(gangBulletGeo, gangBulletMat);
+          bullet.position.set(gnpc.x, 1.3, gnpc.z);
+          scene.add(bullet);
+          state.gangBullets.push({
+            mesh: bullet, x: gnpc.x, y: 1.3, z: gnpc.z,
+            dx: (ndx / nd) * 50, dy: 0, dz: (ndz / nd) * 50,
+            life: 1.5, gangIndex: gnpc.gangIndex
+          });
+        }
+      }
+    }
+
+    // Clamp Z to prevent beach
+    gnpc.z = Math.min(gnpc.z, HALF_CITY - 2);
+    gnpc.mesh.position.set(gnpc.x, 0, gnpc.z);
+
+    // Leg animation
+    gnpc.legPhase += dt * gnpc.speed * 2;
+    const swing = Math.sin(gnpc.legPhase) * 0.4;
+    gnpc.leftLeg.rotation.x = swing;
+    gnpc.rightLeg.rotation.x = -swing;
+  }
+}
+
+// ── Gang Bullets ─────────────────────────────────────────────────────
+export function updateGangBullets(dt) {
+  for (let i = state.gangBullets.length - 1; i >= 0; i--) {
+    const b = state.gangBullets[i];
+    b.x += b.dx * dt; b.y += b.dy * dt; b.z += b.dz * dt;
+    b.life -= dt;
+    b.mesh.position.set(b.x, b.y, b.z);
+
+    if (b.life <= 0) { scene.remove(b.mesh); state.gangBullets.splice(i, 1); continue; }
+
+    // Hit player
+    const px = state.player.x, pz = state.player.z;
+    const pdx = px - b.x, pdz = pz - b.z;
+    if (pdx * pdx + pdz * pdz < 2 && !state.isInVehicle && !state.isDead) {
+      state.health -= 15;
+      scene.remove(b.mesh); state.gangBullets.splice(i, 1);
+      continue;
+    }
+
+    // Hit civilian NPCs
+    let hitCiv = false;
+    for (const npc of state.npcs) {
+      if (!npc.alive) continue;
+      const ndx = npc.x - b.x, ndz = npc.z - b.z;
+      if (ndx * ndx + ndz * ndz < 2) {
+        launchNpcRagdoll(npc, 8, Math.atan2(b.dx, b.dz));
+        scene.remove(b.mesh); state.gangBullets.splice(i, 1);
+        hitCiv = true;
+        break;
+      }
+    }
+    if (hitCiv) continue;
+
+    // Hit rival gang members
+    for (const gnpc of state.gangNpcs) {
+      if (gnpc.dead || gnpc.gangIndex === b.gangIndex) continue;
+      if (gnpc.ragdoll && gnpc.ragdoll.active) continue;
+      const gdx = gnpc.x - b.x, gdz = gnpc.z - b.z;
+      if (gdx * gdx + gdz * gdz < 2) {
+        gnpc.dead = true;
+        gnpc.mesh.rotation.x = Math.PI / 2;
+        gnpc.respawnTimer = 15;
+        setTimeout(() => { gnpc.mesh.visible = false; }, 1000);
+        scene.remove(b.mesh); state.gangBullets.splice(i, 1);
+        break;
+      }
     }
   }
 }

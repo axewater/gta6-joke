@@ -64,6 +64,19 @@ export const NPC_RAGDOLL_DURATION = 3.0;
 export const EXPLOSION_DURATION = 4.0;
 
 // Traffic
-export const TRAFFIC_CAR_COUNT = 15;
+export const TRAFFIC_CAR_COUNT = 25;
 export const TRAFFIC_GREEN_TIME = 12;
 export const TRAFFIC_YELLOW_TIME = 2;
+
+// NPC count
+export const NPC_COUNT = 80;
+
+// Gang zones
+export const GANG_ZONES = [
+  { name: 'Los Diablos', color: 0xFF2222, shirtColor: 0xCC0000,
+    cells: [[0,0],[0,1],[1,0],[1,1]], shootRange: 30, aggroRange: 40 },
+  { name: 'Grove Street', color: 0x22FF22, shirtColor: 0x006600,
+    cells: [[9,0],[9,1],[8,0],[8,1]], shootRange: 25, aggroRange: 35 },
+];
+export const GANG_NPC_PER_ZONE = 8;
+export const GANG_SHOOT_COOLDOWN = 1.5;

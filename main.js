@@ -2,10 +2,10 @@ import * as THREE from 'three';
 import { initRenderer, renderer, scene, camera, composer } from './renderer.js';
 import { state } from './state.js';
 import { setupLighting, createCity, createRamps, createOceanAndBeach, createPalmTrees, createClouds, createSkyDome, createMoneyPickups, createGunStore, createTrafficLights, updateTrafficLights, createMountains } from './city.js';
-import { createPlayer, createNPCs } from './characters.js';
+import { createPlayer, createNPCs, createGangNPCs } from './characters.js';
 import { spawnVehicles, createTrafficCars } from './vehicles.js';
 import { updateRagdoll, checkVehiclePlayerCollision, triggerRagdoll } from './physics.js';
-import { updateNPCs, updateTrafficCars, updatePolice, updatePoliceOfficers, updateTanks } from './ai.js';
+import { updateNPCs, updateTrafficCars, updatePolice, updatePoliceOfficers, updateTanks, updateGangNPCs, updateGangBullets } from './ai.js';
 import { updatePlayer, updateVehicle, updateTireSmoke, handleVehicleToggle, handlePunch, handleShoot, updateBullets, updateMoneyPickups, updateWanted, updateDeath, commitCrime } from './player.js';
 import { createRain, updateRain } from './weather.js';
 import { updateCamera } from './camera.js';
@@ -43,6 +43,7 @@ async function init() {
     { fn: createPlayer, label: 'Creating player...' },
     { fn: spawnVehicles, label: 'Spawning vehicles...' },
     { fn: createNPCs, label: 'Populating city...' },
+    { fn: createGangNPCs, label: 'Spawning gangs...' },
     { fn: createTrafficCars, label: 'Adding traffic...' },
     { fn: createTrafficLights, label: 'Installing traffic lights...' },
     { fn: createMoneyPickups, label: 'Placing pickups...' },
@@ -168,6 +169,7 @@ function gameLoop() {
     updateNPCs(dt * 2);
     updateTrafficCars(dt * 2);
     updateTrafficLights(dt * 2);
+    updateGangNPCs(dt * 2);
   }
 
   updatePolice(dt);
@@ -175,6 +177,7 @@ function gameLoop() {
   updateHelicopter(dt);
   updateTanks(dt);
   updateBullets(dt);
+  updateGangBullets(dt);
 
   if (state.shootCooldown > 0) state.shootCooldown -= dt;
 

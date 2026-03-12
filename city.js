@@ -630,6 +630,323 @@ export function createRamps() {
   }
 }
 
+// ── Gas Station ──────────────────────────────────────────────────────
+function createGasStation(blockCenterX, blockCenterZ) {
+  // Flat canopy on 4 poles
+  const canopyMat = new THREE.MeshStandardMaterial({ color: 0xCCCCCC, roughness: 0.5, metalness: 0.3 });
+  const canopy = new THREE.Mesh(new THREE.BoxGeometry(20, 0.4, 12), canopyMat);
+  canopy.position.set(blockCenterX, 4, blockCenterZ - 5);
+  canopy.castShadow = true;
+  scene.add(canopy);
+
+  // 4 poles
+  const poleMat = new THREE.MeshStandardMaterial({ color: 0x888888, metalness: 0.5 });
+  const poleGeo = new THREE.CylinderGeometry(0.2, 0.2, 4, 6);
+  for (const [px, pz] of [[-8, -10], [8, -10], [-8, 0], [8, 0]]) {
+    const pole = new THREE.Mesh(poleGeo, poleMat);
+    pole.position.set(blockCenterX + px, 2, blockCenterZ + pz);
+    scene.add(pole);
+  }
+
+  // Small shop building
+  const shopW = 10, shopH = 5, shopD = 8;
+  const shopMat = new THREE.MeshStandardMaterial({ color: 0xCC3333, roughness: 0.7 });
+  const shop = new THREE.Mesh(new THREE.BoxGeometry(shopW, shopH, shopD), shopMat);
+  shop.position.set(blockCenterX, shopH / 2, blockCenterZ + 15);
+  shop.castShadow = true;
+  scene.add(shop);
+  state.buildingMeshes.push(shop);
+  pushAABB(blockCenterX, blockCenterZ + 15, shopW, shopD, shopH);
+
+  // Gas pumps
+  const pumpMat = new THREE.MeshStandardMaterial({ color: 0xEEEEEE, roughness: 0.6 });
+  for (let p = 0; p < 3; p++) {
+    const pump = new THREE.Mesh(new THREE.BoxGeometry(1, 2, 0.8), pumpMat);
+    pump.position.set(blockCenterX - 6 + p * 6, 1, blockCenterZ - 5);
+    scene.add(pump);
+    pushAABB(blockCenterX - 6 + p * 6, blockCenterZ - 5, 1, 0.8, 2);
+  }
+
+  // Sign
+  const signMat = new THREE.MeshStandardMaterial({ color: 0xFF4444, emissive: 0xFF2222, emissiveIntensity: 2 });
+  const sign = new THREE.Mesh(new THREE.PlaneGeometry(6, 2), signMat);
+  sign.position.set(blockCenterX, 6, blockCenterZ + 19.1);
+  scene.add(sign);
+}
+
+// ── Liquor Store ─────────────────────────────────────────────────────
+function createLiquorStore(blockCenterX, blockCenterZ) {
+  const w = 12, h = 6, d = 10;
+  const color = 0x8B7355;
+  addBuilding(blockCenterX, blockCenterZ, w, h, d, color, false);
+  pushAABB(blockCenterX, blockCenterZ, w, d, h);
+
+  // Neon "LIQUOR" sign
+  const signMat = new THREE.MeshStandardMaterial({ color: 0xFF1493, emissive: 0xFF1493, emissiveIntensity: 3 });
+  const sign = new THREE.Mesh(new THREE.PlaneGeometry(8, 1.5), signMat);
+  sign.position.set(blockCenterX, h * 0.8, blockCenterZ + d / 2 + 0.06);
+  scene.add(sign);
+
+  // Window bars
+  const barMat = new THREE.MeshStandardMaterial({ color: 0x333333, metalness: 0.7 });
+  for (let b = 0; b < 4; b++) {
+    const bar = new THREE.Mesh(new THREE.BoxGeometry(0.1, 3, 0.1), barMat);
+    bar.position.set(blockCenterX - 3 + b * 2, 2, blockCenterZ + d / 2 + 0.1);
+    scene.add(bar);
+  }
+
+  // Neon light
+  const pl = new THREE.PointLight(0xFF1493, 2, 20);
+  pl.position.set(blockCenterX, h, blockCenterZ + d / 2 + 1);
+  pl.castShadow = false;
+  scene.add(pl);
+  state.neonPointLights.push(pl);
+}
+
+// ── Motel ────────────────────────────────────────────────────────────
+function createMotel(blockCenterX, blockCenterZ) {
+  // L-shaped 2-story building
+  const h = 8;
+  const w1 = 25, d1 = 8;
+  addBuilding(blockCenterX, blockCenterZ - 10, w1, h, d1, 0xDEB887, false);
+  pushAABB(blockCenterX, blockCenterZ - 10, w1, d1, h);
+
+  const w2 = 8, d2 = 20;
+  addBuilding(blockCenterX + 10, blockCenterZ + 2, w2, h, d2, 0xDEB887, false);
+  pushAABB(blockCenterX + 10, blockCenterZ + 2, w2, d2, h);
+
+  // Corridor railings (exterior walkway)
+  const railMat = new THREE.MeshStandardMaterial({ color: 0x666666, metalness: 0.5 });
+  const rail = new THREE.Mesh(new THREE.BoxGeometry(w1 - 2, 0.1, 0.1), railMat);
+  rail.position.set(blockCenterX, 4.5, blockCenterZ - 6.1);
+  scene.add(rail);
+
+  // "MOTEL" neon sign
+  const signMat = new THREE.MeshStandardMaterial({ color: 0x00FFFF, emissive: 0x00FFFF, emissiveIntensity: 3 });
+  const sign = new THREE.Mesh(new THREE.PlaneGeometry(8, 2), signMat);
+  sign.position.set(blockCenterX - 8, 9, blockCenterZ - 14.1);
+  scene.add(sign);
+
+  // Vacancy sub-sign
+  const vacMat = new THREE.MeshStandardMaterial({ color: 0xFF4444, emissive: 0xFF4444, emissiveIntensity: 2 });
+  const vac = new THREE.Mesh(new THREE.PlaneGeometry(5, 1), vacMat);
+  vac.position.set(blockCenterX - 8, 7.5, blockCenterZ - 14.1);
+  scene.add(vac);
+
+  const pl = new THREE.PointLight(0x00FFFF, 2, 20);
+  pl.position.set(blockCenterX - 8, 9, blockCenterZ - 14);
+  pl.castShadow = false;
+  scene.add(pl);
+  state.neonPointLights.push(pl);
+}
+
+// ── Apartment Block ──────────────────────────────────────────────────
+function createApartmentBlock(blockCenterX, blockCenterZ) {
+  const h = 20 + Math.random() * 15;
+  const w = 14 + Math.random() * 6, d = 12 + Math.random() * 6;
+  const color = pick(RESIDENTIAL_COLORS);
+
+  addBuilding(blockCenterX, blockCenterZ, w, h, d, color, true);
+  pushAABB(blockCenterX, blockCenterZ, w, d, h);
+
+  // Fire escape zig-zag on side
+  const escapeMat = new THREE.MeshStandardMaterial({ color: 0x444444, metalness: 0.6 });
+  const floors = Math.floor(h / 4);
+  for (let f = 0; f < floors; f++) {
+    const y = 2 + f * 4;
+    // Platform
+    const plat = new THREE.Mesh(new THREE.BoxGeometry(3, 0.1, 1.5), escapeMat);
+    plat.position.set(blockCenterX + w / 2 + 0.8, y, blockCenterZ + (f % 2 === 0 ? -2 : 2));
+    scene.add(plat);
+    // Railing
+    const rail = new THREE.Mesh(new THREE.BoxGeometry(0.08, 1, 1.5), escapeMat);
+    rail.position.set(blockCenterX + w / 2 + 2.2, y + 0.5, blockCenterZ + (f % 2 === 0 ? -2 : 2));
+    scene.add(rail);
+  }
+}
+
+// ── Church ───────────────────────────────────────────────────────────
+function createChurch(blockCenterX, blockCenterZ) {
+  const h = 10, w = 14, d = 20;
+  const color = 0xFFF8DC; // cream
+
+  addBuilding(blockCenterX, blockCenterZ, w, h, d, color, false);
+  pushAABB(blockCenterX, blockCenterZ, w, d, h);
+
+  // Steeple - tall thin box
+  const steepleMat = new THREE.MeshStandardMaterial({ color: 0xFFFFEE, roughness: 0.7 });
+  const steeple = new THREE.Mesh(new THREE.BoxGeometry(3, 12, 3), steepleMat);
+  steeple.position.set(blockCenterX, h + 6, blockCenterZ - d / 2 + 3);
+  scene.add(steeple);
+
+  // Pyramid top
+  const pyramidGeo = new THREE.ConeGeometry(2.5, 6, 4);
+  const pyramidMat = new THREE.MeshStandardMaterial({ color: 0x8B4513, roughness: 0.8 });
+  const pyramid = new THREE.Mesh(pyramidGeo, pyramidMat);
+  pyramid.position.set(blockCenterX, h + 15, blockCenterZ - d / 2 + 3);
+  pyramid.rotation.y = Math.PI / 4;
+  scene.add(pyramid);
+
+  // Cross on top (not AABB)
+  const crossMat = new THREE.MeshStandardMaterial({ color: 0xFFD700, metalness: 0.6 });
+  const crossV = new THREE.Mesh(new THREE.BoxGeometry(0.2, 2, 0.2), crossMat);
+  crossV.position.set(blockCenterX, h + 19, blockCenterZ - d / 2 + 3);
+  scene.add(crossV);
+  const crossH = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.2, 0.2), crossMat);
+  crossH.position.set(blockCenterX, h + 19.5, blockCenterZ - d / 2 + 3);
+  scene.add(crossH);
+}
+
+// ── Restaurant (McDonald's-like) ─────────────────────────────────────
+function createRestaurant(blockCenterX, blockCenterZ) {
+  const w = 10, h = 6, d = 12;
+  const wallMat = new THREE.MeshStandardMaterial({ color: 0xCC2222, roughness: 0.7 });
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), wallMat);
+  mesh.position.set(blockCenterX, h / 2, blockCenterZ);
+  mesh.castShadow = true;
+  scene.add(mesh);
+  state.buildingMeshes.push(mesh);
+  pushAABB(blockCenterX, blockCenterZ, w, d, h);
+
+  // Yellow accent stripe
+  const stripeMat = new THREE.MeshStandardMaterial({ color: 0xFFCC00, roughness: 0.5 });
+  const stripe = new THREE.Mesh(new THREE.BoxGeometry(w + 0.1, 1, d + 0.1), stripeMat);
+  stripe.position.set(blockCenterX, h - 0.5, blockCenterZ);
+  scene.add(stripe);
+
+  // Golden "M" sign on front (3 yellow boxes forming M shape)
+  const mMat = new THREE.MeshStandardMaterial({ color: 0xFFD700, emissive: 0xFFD700, emissiveIntensity: 2 });
+  // Left leg of M
+  const mL = new THREE.Mesh(new THREE.BoxGeometry(0.4, 3, 0.2), mMat);
+  mL.position.set(blockCenterX - 1.2, 4, blockCenterZ + d / 2 + 0.15);
+  scene.add(mL);
+  // Right leg of M
+  const mR = new THREE.Mesh(new THREE.BoxGeometry(0.4, 3, 0.2), mMat);
+  mR.position.set(blockCenterX + 1.2, 4, blockCenterZ + d / 2 + 0.15);
+  scene.add(mR);
+  // Center peak of M
+  const mC = new THREE.Mesh(new THREE.BoxGeometry(0.4, 2, 0.2), mMat);
+  mC.position.set(blockCenterX, 4.5, blockCenterZ + d / 2 + 0.15);
+  scene.add(mC);
+
+  // Emissive sign board on top
+  const signMat = new THREE.MeshStandardMaterial({ color: 0xFF4444, emissive: 0xFF2222, emissiveIntensity: 2 });
+  const signBoard = new THREE.Mesh(new THREE.BoxGeometry(w * 0.8, 2, 0.3), signMat);
+  signBoard.position.set(blockCenterX, h + 1.5, blockCenterZ + d / 2 + 0.2);
+  scene.add(signBoard);
+
+  // Outdoor seating — tables on one side
+  const tableMat = new THREE.MeshStandardMaterial({ color: 0xCCCCCC, roughness: 0.6 });
+  const chairMat = new THREE.MeshStandardMaterial({ color: 0xFF4444, roughness: 0.7 });
+  const legGeo = new THREE.CylinderGeometry(0.08, 0.08, 0.8, 6);
+
+  for (let t = 0; t < 5; t++) {
+    const tx = blockCenterX - 8 + t * 4;
+    const tz = blockCenterZ + d / 2 + 4;
+
+    // Table top
+    const top = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.1, 1.5), tableMat);
+    top.position.set(tx, 0.85, tz);
+    scene.add(top);
+    // Table leg
+    const leg = new THREE.Mesh(legGeo, tableMat);
+    leg.position.set(tx, 0.4, tz);
+    scene.add(leg);
+
+    // 2 chairs
+    for (const cz of [tz - 1.2, tz + 1.2]) {
+      const chair = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.1, 0.6), chairMat);
+      chair.position.set(tx, 0.5, cz);
+      scene.add(chair);
+
+      // Register seat
+      state.restaurantSeats.push({
+        x: tx, z: cz, tableX: tx, tableZ: tz, occupied: false
+      });
+    }
+  }
+}
+
+// ── Donut Shop ───────────────────────────────────────────────────────
+function createDonutShop(blockCenterX, blockCenterZ) {
+  const w = 8, h = 5, d = 9;
+  const wallMat = new THREE.MeshStandardMaterial({ color: 0xFFB6C1, roughness: 0.7 }); // pink
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), wallMat);
+  mesh.position.set(blockCenterX, h / 2, blockCenterZ);
+  mesh.castShadow = true;
+  scene.add(mesh);
+  state.buildingMeshes.push(mesh);
+  pushAABB(blockCenterX, blockCenterZ, w, d, h);
+
+  // White trim
+  const trimMat = new THREE.MeshStandardMaterial({ color: 0xFFFFFF, roughness: 0.5 });
+  const trim = new THREE.Mesh(new THREE.BoxGeometry(w + 0.1, 0.5, d + 0.1), trimMat);
+  trim.position.set(blockCenterX, h, blockCenterZ);
+  scene.add(trim);
+
+  // Giant donut on roof
+  const donutGeo = new THREE.TorusGeometry(3, 1.2, 12, 24);
+  const donutMat = new THREE.MeshStandardMaterial({ color: 0xFF69B4, roughness: 0.4 }); // pink frosting
+  const donut = new THREE.Mesh(donutGeo, donutMat);
+  donut.position.set(blockCenterX, h + 4, blockCenterZ);
+  donut.rotation.y = Math.PI / 2;
+  scene.add(donut);
+
+  // Brown base of donut
+  const baseMat = new THREE.MeshStandardMaterial({ color: 0x8B4513, roughness: 0.6 });
+  const donutBase = new THREE.Mesh(new THREE.TorusGeometry(3, 1.0, 12, 24), baseMat);
+  donutBase.position.set(blockCenterX, h + 3.8, blockCenterZ);
+  donutBase.rotation.y = Math.PI / 2;
+  scene.add(donutBase);
+
+  // Neon "DONUTS" sign
+  const signMat = new THREE.MeshStandardMaterial({ color: 0xFF00FF, emissive: 0xFF00FF, emissiveIntensity: 3 });
+  const sign = new THREE.Mesh(new THREE.PlaneGeometry(6, 1.2), signMat);
+  sign.position.set(blockCenterX, h * 0.7, blockCenterZ + d / 2 + 0.06);
+  scene.add(sign);
+
+  const pl = new THREE.PointLight(0xFF00FF, 2, 20);
+  pl.position.set(blockCenterX, h, blockCenterZ + d / 2 + 1);
+  pl.castShadow = false;
+  scene.add(pl);
+  state.neonPointLights.push(pl);
+
+  // Outdoor tables with seats
+  const tableMat = new THREE.MeshStandardMaterial({ color: 0xCCCCCC, roughness: 0.6 });
+  const chairMat = new THREE.MeshStandardMaterial({ color: 0xFFB6C1, roughness: 0.7 });
+  const legGeo = new THREE.CylinderGeometry(0.08, 0.08, 0.8, 6);
+
+  for (let t = 0; t < 3; t++) {
+    const tx = blockCenterX - 4 + t * 4;
+    const tz = blockCenterZ + d / 2 + 4;
+
+    const top = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.1, 1.5), tableMat);
+    top.position.set(tx, 0.85, tz);
+    scene.add(top);
+    const leg = new THREE.Mesh(legGeo, tableMat);
+    leg.position.set(tx, 0.4, tz);
+    scene.add(leg);
+
+    for (const cz of [tz - 1.2, tz + 1.2]) {
+      const chair = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.1, 0.6), chairMat);
+      chair.position.set(tx, 0.5, cz);
+      scene.add(chair);
+
+      state.restaurantSeats.push({
+        x: tx, z: cz, tableX: tx, tableZ: tz, occupied: false
+      });
+    }
+  }
+}
+
+// ── Special building placement map ───────────────────────────────────
+const SPECIAL_BUILDINGS = {
+  '6,1': 'RESTAURANT',
+  '7,4': 'RESTAURANT',
+  '4,8': 'DONUT_SHOP',
+  '8,3': 'DONUT_SHOP',
+};
+
 // ── Main createCity ─────────────────────────────────────────────────────
 
 export function randomSidewalkPos() {
@@ -643,6 +960,7 @@ export function randomSidewalkPos() {
     x = -HALF_CITY + roadIdx * CELL + (Math.random() > 0.5 ? 1 : -1) * (ROAD / 2 + 1);
     z = -HALF_CITY + Math.random() * CITY_SIZE;
   }
+  z = Math.min(z, HALF_CITY - 2);
   return { x, z };
 }
 
@@ -770,6 +1088,18 @@ export function createCity() {
     for (let gj = 0; gj < GRID; gj++) {
       const blockCenterX = -HALF_CITY + gj * CELL + ROAD / 2 + BLOCK / 2;
       const blockCenterZ = -HALF_CITY + gi * CELL + ROAD / 2 + BLOCK / 2;
+
+      // Check for special fixed-placement buildings first
+      const specialKey = `${gi},${gj}`;
+      if (SPECIAL_BUILDINGS[specialKey]) {
+        if (SPECIAL_BUILDINGS[specialKey] === 'RESTAURANT') {
+          createRestaurant(blockCenterX, blockCenterZ);
+        } else if (SPECIAL_BUILDINGS[specialKey] === 'DONUT_SHOP') {
+          createDonutShop(blockCenterX, blockCenterZ);
+        }
+        continue;
+      }
+
       const district = getDistrict(gi, gj);
 
       switch (district) {
@@ -782,16 +1112,24 @@ export function createCity() {
           break;
         }
         case 'COM': {
-          // Commercial — shops, occasional L-shaped building or parking garage
+          // Commercial — expanded roll table
           const roll = Math.random();
-          if (roll < 0.1) createParkingGarage(blockCenterX, blockCenterZ);
+          if (roll < 0.05) createGasStation(blockCenterX, blockCenterZ);
+          else if (roll < 0.10) createLiquorStore(blockCenterX, blockCenterZ);
+          else if (roll < 0.15) createParkingGarage(blockCenterX, blockCenterZ);
           else if (roll < 0.25) createLShapedBuilding(blockCenterX, blockCenterZ, BUILDING_COLORS, false);
           else createShop(blockCenterX, blockCenterZ);
           break;
         }
-        case 'RES':
-          createHouse(blockCenterX, blockCenterZ);
+        case 'RES': {
+          // Residential — more variety
+          const roll = Math.random();
+          if (roll < 0.15) createMotel(blockCenterX, blockCenterZ);
+          else if (roll < 0.25) createApartmentBlock(blockCenterX, blockCenterZ);
+          else if (roll < 0.35) createChurch(blockCenterX, blockCenterZ);
+          else createHouse(blockCenterX, blockCenterZ);
           break;
+        }
         case 'IND':
           createWarehouse(blockCenterX, blockCenterZ);
           break;
