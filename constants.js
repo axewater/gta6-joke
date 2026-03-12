@@ -62,3 +62,8 @@ export const CAR_BOUNCE_RESTITUTION = 0.4;
 export const NPC_RAGDOLL_LAUNCH_MULT = 1.5;
 export const NPC_RAGDOLL_DURATION = 3.0;
 export const EXPLOSION_DURATION = 4.0;
+
+// Traffic
+export const TRAFFIC_CAR_COUNT = 15;
+export const TRAFFIC_GREEN_TIME = 12;
+export const TRAFFIC_YELLOW_TIME = 2;

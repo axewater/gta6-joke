@@ -4,7 +4,7 @@ import { state } from './state.js';
 import { GRID, CELL, HALF_CITY, ROAD } from './constants.js';
 import { collideAABB, triggerRagdoll } from './physics.js';
 import { createPoliceOfficer } from './characters.js';
-import { createPoliceCar } from './vehicles.js';
+import { createPoliceCar, createTank } from './vehicles.js';
 import { randomSidewalkPos } from './city.js';
 
 // ── NPC AI ────────────────────────────────────────────────────────────
@@ -78,39 +78,87 @@ export function updateNPCs(dt) {
 }
 
 // ── Traffic Car AI ────────────────────────────────────────────────────
+const PI = Math.PI;
+const TWO_PI = PI * 2;
+
+function isRedForDirection(tl, isNS) {
+  // NS red when phase 2 or 3; EW red when phase 0 or 1
+  if (isNS) return tl.phase === 2 || tl.phase === 3;
+  return tl.phase === 0 || tl.phase === 1;
+}
+
 export function updateTrafficCars(dt) {
   for (const car of state.trafficCars) {
-    const fx = Math.sin(car.rotation) * car.speed * dt;
-    const fz = Math.cos(car.rotation) * car.speed * dt;
-    car.x += fx; car.z += fz;
-    car.waypointDist += car.speed * dt;
+    // Move forward
+    car.x += Math.sin(car.rotation) * car.speed * dt;
+    car.z += Math.cos(car.rotation) * car.speed * dt;
 
-    if (car.waypointDist >= car.waypointMax) {
-      car.waypointDist = 0;
-      car.waypointMax = 40 + Math.random() * 40;
+    // Find nearest intersection
+    const col = Math.round((car.x + HALF_CITY) / CELL);
+    const row = Math.round((car.z + HALF_CITY) / CELL);
+    const ix = -HALF_CITY + col * CELL;
+    const iz = -HALF_CITY + row * CELL;
+    const dix = car.x - ix, diz = car.z - iz;
+    const distToCenter = Math.sqrt(dix * dix + diz * diz);
+
+    // Turn only at intersections (replace old waypoint turning)
+    if (distToCenter < 4 && !car.atIntersection) {
+      car.atIntersection = true;
       const r = Math.random();
-      if (r < 0.2) car.rotation += Math.PI / 2;
-      else if (r < 0.4) car.rotation -= Math.PI / 2;
+      if (r < 0.25) car.rotation += PI / 2;
+      else if (r < 0.5) car.rotation -= PI / 2;
     }
+    if (distToCenter > 12) car.atIntersection = false;
 
-    let slowDown = false;
-    for (const other of state.trafficCars) {
-      if (other === car) continue;
-      const dx = other.x - car.x, dz = other.z - car.z;
-      const dist = Math.sqrt(dx * dx + dz * dz);
-      if (dist < 8) {
-        const dot = (dx * Math.sin(car.rotation) + dz * Math.cos(car.rotation)) / dist;
-        if (dot > 0.5) slowDown = true;
+    // ── Traffic light check ──
+    let shouldStopForLight = false;
+    if (state.trafficLightGrid && col >= 1 && col < GRID && row >= 1 && row < GRID) {
+      const tl = state.trafficLightGrid[row][col];
+      if (tl) {
+        const tdx = ix - car.x, tdz = iz - car.z;
+        const tdist = Math.sqrt(tdx * tdx + tdz * tdz);
+
+        if (tdist > 4 && tdist < 22) {
+          // Check heading toward intersection
+          const dot = (Math.sin(car.rotation) * tdx + Math.cos(car.rotation) * tdz) / tdist;
+          if (dot > 0.4) {
+            // Determine NS vs EW heading
+            const heading = ((car.rotation % TWO_PI) + TWO_PI) % TWO_PI;
+            const isNS = (heading < PI / 4) ||
+                         (heading > 3 * PI / 4 && heading < 5 * PI / 4) ||
+                         (heading > 7 * PI / 4);
+            if (isRedForDirection(tl, isNS)) shouldStopForLight = true;
+          }
+        }
       }
     }
-    const targetSpeed = slowDown ? 3 : (10 + Math.random() * 0.1);
-    car.speed += (targetSpeed - car.speed) * dt * 2;
 
+    // ── Collision avoidance with other traffic ──
+    let slowForTraffic = false;
+    for (const other of state.trafficCars) {
+      if (other === car) continue;
+      const odx = other.x - car.x, odz = other.z - car.z;
+      const odist = Math.sqrt(odx * odx + odz * odz);
+      if (odist < 8) {
+        const dot = (odx * Math.sin(car.rotation) + odz * Math.cos(car.rotation)) / odist;
+        if (dot > 0.5) slowForTraffic = true;
+      }
+    }
+
+    // Speed control
+    let targetSpeed;
+    if (shouldStopForLight) targetSpeed = 0;
+    else if (slowForTraffic) targetSpeed = 3;
+    else targetSpeed = 10 + Math.random() * 0.1;
+
+    car.speed += (targetSpeed - car.speed) * dt * 2;
+    if (shouldStopForLight && car.speed < 0.5) car.speed = 0;
+
+    // Building collision
     const c = collideAABB(car.x, car.z, car.halfW, car.halfD);
     if (c.x !== car.x || c.z !== car.z) {
       car.x = c.x; car.z = c.z;
-      car.rotation += Math.PI / 2;
-      car.waypointDist = 0;
+      car.rotation += PI / 2;
     }
 
     // Wrap
@@ -184,6 +232,91 @@ export function updatePolice(dt) {
         Math.cos(cop.rotation) * cop.speed * 1.2,
         cop.speed > 10
       );
+    }
+  }
+}
+
+// ── Army Tanks ────────────────────────────────────────────────────────
+export function updateTanks(dt) {
+  const targetCount = state.wantedLevel >= 5 ? 3 : 0;
+
+  while (state.tanks.length < targetCount) {
+    const angle = Math.random() * Math.PI * 2;
+    const dist = 100 + Math.random() * 50;
+    const px = state.isInVehicle ? state.currentVehicle.x : state.player.x;
+    const pz = state.isInVehicle ? state.currentVehicle.z : state.player.z;
+    state.tanks.push(createTank(px + Math.cos(angle) * dist, pz + Math.sin(angle) * dist));
+  }
+  while (state.tanks.length > targetCount) {
+    const tank = state.tanks.pop();
+    for (const s of tank.shells) scene.remove(s.mesh);
+    scene.remove(tank.mesh);
+  }
+
+  const playerX = state.isInVehicle ? state.currentVehicle.x : state.player.x;
+  const playerZ = state.isInVehicle ? state.currentVehicle.z : state.player.z;
+
+  for (const tank of state.tanks) {
+    const dx = playerX - tank.x, dz = playerZ - tank.z;
+    const dist = Math.sqrt(dx * dx + dz * dz);
+
+    if (dist > 8) {
+      const targetAngle = Math.atan2(dx, dz);
+      let angleDiff = targetAngle - tank.rotation;
+      while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+      while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+      tank.rotation += angleDiff * dt * 2;
+      tank.x += Math.sin(tank.rotation) * 6 * dt;
+      tank.z += Math.cos(tank.rotation) * 6 * dt;
+    }
+
+    // Turret independently tracks player
+    tank.turretGroup.rotation.y = Math.atan2(dx, dz) - tank.rotation;
+    tank.mesh.position.set(tank.x, 0, tank.z);
+    tank.mesh.rotation.y = tank.rotation;
+
+    // Fire cannon shell
+    tank.shootTimer -= dt;
+    if (tank.shootTimer <= 0 && dist < 150) {
+      tank.shootTimer = 4 + Math.random() * 2;
+      const shellGeo = new THREE.SphereGeometry(0.3, 6, 6);
+      const shellMat = new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.7, metalness: 0.4 });
+      const shellMesh = new THREE.Mesh(shellGeo, shellMat);
+      shellMesh.position.set(tank.x, 1.8, tank.z);
+      scene.add(shellMesh);
+      const dxN = dx / dist, dzN = dz / dist;
+      tank.shells.push({
+        mesh: shellMesh,
+        x: tank.x, y: 1.8, z: tank.z,
+        dx: dxN * 40, dy: 0.5, dz: dzN * 40,
+        life: 5.0
+      });
+    }
+
+    // Update shells
+    for (let i = tank.shells.length - 1; i >= 0; i--) {
+      const s = tank.shells[i];
+      s.x += s.dx * dt;
+      s.y += s.dy * dt;
+      s.z += s.dz * dt;
+      s.dy -= 15 * dt;
+      s.life -= dt;
+      s.mesh.position.set(s.x, s.y, s.z);
+
+      const px2 = state.isInVehicle ? state.currentVehicle.x : state.player.x;
+      const pz2 = state.isInVehicle ? state.currentVehicle.z : state.player.z;
+      const ddx = px2 - s.x, ddz = pz2 - s.z;
+      const hitPlayer = (ddx * ddx + ddz * ddz < 64); // radius 8 AOE
+
+      if (s.life <= 0 || s.y <= 0 || hitPlayer) {
+        if (hitPlayer && !state.isDead) {
+          state.health -= 60;
+          state.cameraShake.intensity = 1.5;
+          state.cameraShake.timer = 0.8;
+        }
+        scene.remove(s.mesh);
+        tank.shells.splice(i, 1);
+      }
     }
   }
 }

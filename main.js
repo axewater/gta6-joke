@@ -1,11 +1,11 @@
 import * as THREE from 'three';
 import { initRenderer, renderer, scene, camera, composer } from './renderer.js';
 import { state } from './state.js';
-import { setupLighting, createCity, createRamps, createOceanAndBeach, createPalmTrees, createClouds, createSkyDome, createMoneyPickups, createGunStore } from './city.js';
+import { setupLighting, createCity, createRamps, createOceanAndBeach, createPalmTrees, createClouds, createSkyDome, createMoneyPickups, createGunStore, createTrafficLights, updateTrafficLights, createMountains } from './city.js';
 import { createPlayer, createNPCs } from './characters.js';
 import { spawnVehicles, createTrafficCars } from './vehicles.js';
 import { updateRagdoll, checkVehiclePlayerCollision, triggerRagdoll } from './physics.js';
-import { updateNPCs, updateTrafficCars, updatePolice, updatePoliceOfficers } from './ai.js';
+import { updateNPCs, updateTrafficCars, updatePolice, updatePoliceOfficers, updateTanks } from './ai.js';
 import { updatePlayer, updateVehicle, updateTireSmoke, handleVehicleToggle, handlePunch, handleShoot, updateBullets, updateMoneyPickups, updateWanted, updateDeath, commitCrime } from './player.js';
 import { createRain, updateRain } from './weather.js';
 import { updateCamera } from './camera.js';
@@ -14,6 +14,7 @@ import { updateDayNight, updateClouds } from './daynight.js';
 import { checkPlayerCarNpcCollision, checkCarCarCollisions } from './collision.js';
 import { updateNpcRagdolls } from './npc-ragdoll.js';
 import { updateExplosions, setTriggerRagdoll, initExplosionPool } from './vehicle-damage.js';
+import { updateHelicopter } from './helicopter.js';
 
 let clock;
 
@@ -33,6 +34,7 @@ async function init() {
     { fn: createCity, label: 'Building city...' },
     { fn: createRamps, label: 'Placing ramps...' },
     { fn: createOceanAndBeach, label: 'Creating ocean...' },
+    { fn: createMountains, label: 'Building mountains...' },
     { fn: createPalmTrees, label: 'Planting trees...' },
     { fn: createClouds, label: 'Generating clouds...' },
     { fn: createSkyDome, label: 'Building sky...' },
@@ -42,18 +44,35 @@ async function init() {
     { fn: spawnVehicles, label: 'Spawning vehicles...' },
     { fn: createNPCs, label: 'Populating city...' },
     { fn: createTrafficCars, label: 'Adding traffic...' },
+    { fn: createTrafficLights, label: 'Installing traffic lights...' },
     { fn: createMoneyPickups, label: 'Placing pickups...' },
     { fn: createGunStore, label: 'Opening stores...' },
     { fn: initHUD, label: 'Setting up HUD...' },
-    { fn: () => renderer.compile(scene, camera), label: 'Compiling shaders...' },
   ];
+
+  // +2 for the compile and first-render steps below
+  const total = steps.length + 2;
 
   for (let i = 0; i < steps.length; i++) {
     status.textContent = steps[i].label;
-    bar.style.width = Math.round((i / steps.length) * 100) + '%';
+    bar.style.width = Math.round((i / total) * 100) + '%';
     await yieldFrame();
     steps[i].fn();
   }
+
+  // Compile shaders — this can block the thread for several seconds.
+  // Show the label first so the user knows what's happening.
+  status.textContent = 'Compiling shaders...';
+  bar.style.width = Math.round((steps.length / total) * 100) + '%';
+  await yieldFrame();
+  renderer.compile(scene, camera);
+
+  // First render — some browsers defer GPU compilation until the first draw call,
+  // which can also take several seconds.
+  status.textContent = 'Starting engine...';
+  bar.style.width = Math.round(((steps.length + 1) / total) * 100) + '%';
+  await yieldFrame();
+  composer.render();
 
   bar.style.width = '100%';
   status.textContent = 'Ready!';
@@ -148,10 +167,13 @@ function gameLoop() {
   if (state.frameCount % 2 === 0) {
     updateNPCs(dt * 2);
     updateTrafficCars(dt * 2);
+    updateTrafficLights(dt * 2);
   }
 
   updatePolice(dt);
   updatePoliceOfficers(dt);
+  updateHelicopter(dt);
+  updateTanks(dt);
   updateBullets(dt);
 
   if (state.shootCooldown > 0) state.shootCooldown -= dt;

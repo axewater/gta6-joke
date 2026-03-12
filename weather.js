@@ -46,6 +46,21 @@ export function updateRain(dt) {
     state.rainToggleTimer = state.rainActive
       ? 20 + Math.random() * 40
       : 30 + Math.random() * 60;
+
+    if (state.roadMaterial) {
+      if (state.rainActive) {
+        state.roadMaterial.roughness = 0.05;
+        state.roadMaterial.metalness = 0.8;
+      } else {
+        state.roadMaterial.roughness = 0.75;
+        state.roadMaterial.metalness = 0.05;
+      }
+      state.roadMaterial.needsUpdate = true;
+    }
+    if (state.puddleMaterial) {
+      state.puddleMaterial.opacity = state.rainActive ? 0.35 : 0;
+      state.puddleMaterial.needsUpdate = true;
+    }
   }
 
   if (!state.rainPoints) return;

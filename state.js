@@ -19,6 +19,8 @@ export const state = {
   gameTime: 0.5,
   npcs: [],
   trafficCars: [],
+  trafficLights: [],
+  trafficLightGrid: null,
   policeCars: [],
   moneyPickups: [],
   clouds: [],
@@ -71,4 +73,13 @@ export const state = {
   rainToggleTimer: 0,
   // Tire smoke
   tireSmokeParticles: [],
+  // Kill tracking for wanted escalation
+  killCount: 0,
+  policeKilled: 0,
+  // Heavy forces
+  helicopter: null,
+  tanks: [],
+  // Road material refs for rain toggle
+  roadMaterial: null,
+  puddleMaterial: null,
 };

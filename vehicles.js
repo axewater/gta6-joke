@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { scene } from './renderer.js';
 import { state } from './state.js';
-import { GRID, CELL, HALF_CITY } from './constants.js';
+import { GRID, CELL, HALF_CITY, TRAFFIC_CAR_COUNT } from './constants.js';
 
 // ── Shared materials ───────────────────────────────────────────────────
 const chromeMat = new THREE.MeshStandardMaterial({ color: 0xcccccc, roughness: 0.1, metalness: 0.9 });
@@ -234,8 +234,12 @@ export function spawnVehicles() {
 
 // ── Traffic cars ───────────────────────────────────────────────────────
 export function createTrafficCars() {
-  const colors = [0xFF6633, 0x33CCFF, 0xFFCC00, 0xCC33FF, 0x33FF66, 0xFF3366];
-  for (let i = 0; i < 6; i++) {
+  const colors = [
+    0xFF6633, 0x33CCFF, 0xFFCC00, 0xCC33FF, 0x33FF66, 0xFF3366,
+    0x4488FF, 0xFF8844, 0x44CC88, 0xDD4477, 0x88BBDD, 0xEEAA33,
+    0x77AAFF, 0xBB5533, 0x55CC55
+  ];
+  for (let i = 0; i < TRAFFIC_CAR_COUNT; i++) {
     const roadIdx = 1 + Math.floor(Math.random() * (GRID - 1));
     const horizontal = Math.random() > 0.5;
     let x, z, rot;
@@ -248,9 +252,10 @@ export function createTrafficCars() {
       z = -HALF_CITY + Math.random() * (GRID * CELL);
       rot = Math.random() > 0.5 ? Math.PI / 2 : -Math.PI / 2;
     }
-    const car = createDetailedCar(x, z, rot, colors[i]);
+    const car = createDetailedCar(x, z, rot, colors[i % colors.length]);
     car.speed = 10 + Math.random() * 5;
     car.isTraffic = true;
+    car.atIntersection = false;
     state.trafficCars.push(car);
   }
 }
@@ -273,6 +278,7 @@ export function spawnTrafficCar() {
   const car = createDetailedCar(x, z, rot, colors[Math.floor(Math.random() * colors.length)]);
   car.speed = 10 + Math.random() * 5;
   car.isTraffic = true;
+  car.atIntersection = false;
   return car;
 }
 
@@ -281,4 +287,53 @@ export function createPoliceCar(x, z, rotation) {
   const car = createDetailedCar(x, z, rotation, 0x111133, { isPolice: true });
   car.speed = 18;
   return car;
+}
+
+// ── Army Tank ───────────────────────────────────────────────────────────
+export function createTank(x, z) {
+  const group = new THREE.Group();
+  const hullMat = new THREE.MeshStandardMaterial({ color: 0x3a5a1a, roughness: 0.9 });
+  const trackMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.95 });
+
+  // Hull
+  const hull = new THREE.Mesh(new THREE.BoxGeometry(4, 1.2, 6), hullMat);
+  hull.position.y = 0.8;
+  group.add(hull);
+
+  // Tracks (left & right)
+  const trackGeo = new THREE.BoxGeometry(0.8, 0.9, 6.2);
+  const trackL = new THREE.Mesh(trackGeo, trackMat);
+  trackL.position.set(-2.1, 0.55, 0);
+  group.add(trackL);
+  const trackR = trackL.clone();
+  trackR.position.x = 2.1;
+  group.add(trackR);
+
+  // Turret group (rotates independently)
+  const turretGroup = new THREE.Group();
+  turretGroup.position.set(0, 1.6, 0);
+  group.add(turretGroup);
+
+  const turret = new THREE.Mesh(new THREE.BoxGeometry(2.5, 0.8, 2.5), hullMat);
+  turretGroup.add(turret);
+
+  // Barrel
+  const barrelMat = new THREE.MeshStandardMaterial({ color: 0x2a2a2a, roughness: 0.8, metalness: 0.5 });
+  const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 2.5, 8), barrelMat);
+  barrel.rotation.x = Math.PI / 2;
+  barrel.position.set(0, 0, 1.5);
+  turretGroup.add(barrel);
+
+  group.position.set(x, 0, z);
+  scene.add(group);
+
+  return {
+    mesh: group,
+    turretGroup,
+    x, z,
+    rotation: Math.random() * Math.PI * 2,
+    halfW: 2.2, halfD: 3.2,
+    shootTimer: 4 + Math.random() * 2,
+    shells: []
+  };
 }

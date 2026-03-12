@@ -18,6 +18,30 @@ export function commitCrime() {
   state.lastCrimeTime = state.elapsedTime;
 }
 
+export function registerCivilianKill() {
+  state.killCount++;
+  state.wantedDecayTimer = 0;
+  state.lastCrimeTime = state.elapsedTime;
+  recalcWanted();
+}
+
+export function registerPoliceKill() {
+  state.policeKilled++;
+  state.wantedDecayTimer = 0;
+  state.lastCrimeTime = state.elapsedTime;
+  recalcWanted();
+}
+
+function recalcWanted() {
+  let minLevel = 0;
+  if (state.killCount >= 1) minLevel = Math.max(minLevel, 1);
+  if (state.killCount >= 2) minLevel = Math.max(minLevel, 2);
+  if (state.killCount >= 5) minLevel = Math.max(minLevel, 4);
+  if (state.killCount >= 8) minLevel = Math.max(minLevel, 5);
+  if (state.policeKilled >= 1) minLevel = Math.max(minLevel, 3);
+  state.wantedLevel = Math.max(state.wantedLevel, minLevel);
+}
+
 // ── Update Player on Foot ───────────────────────────────────────────────
 export function updatePlayer(dt) {
   if (state.isDead) return;
@@ -55,6 +79,11 @@ export function updatePlayer(dt) {
 
   const corrected = collideAABB(p.x, p.z, 0.5, 0.3);
   p.x = corrected.x; p.z = corrected.z;
+
+  // Drowning in ocean
+  if (p.z > HALF_CITY + 72) {
+    state.health -= 30 * dt;
+  }
 
   p.mesh.position.set(p.x, p.y, p.z);
 
@@ -191,6 +220,12 @@ export function updateVehicle(dt) {
     v.vehicleY = 0;
   }
 
+  // Drowning in ocean
+  if (v.z > HALF_CITY + 72) {
+    state.health -= 30 * dt;
+    v.speed *= 0.85; // drag
+  }
+
   v.mesh.position.set(v.x, v.vehicleY, v.z);
   v.mesh.rotation.y = v.rotation;
   v.mesh.rotation.x = v.pitchAngle;
@@ -310,7 +345,7 @@ export function handlePunch() {
     closest.alive = false;
     closest.mesh.rotation.x = Math.PI / 2;
     closest.respawnTimer = 15;
-    commitCrime();
+    registerCivilianKill();
     setTimeout(() => { closest.mesh.visible = false; }, 1000);
 
     for (const npc of state.npcs) {
@@ -369,7 +404,7 @@ export function updateBullets(dt) {
         npc.aggressive = false;
         setTimeout(() => { npc.mesh.visible = false; }, 1000);
         scene.remove(b.mesh); state.playerBullets.splice(i, 1);
-        commitCrime(); break;
+        registerCivilianKill(); break;
       }
     }
 
@@ -378,7 +413,8 @@ export function updateBullets(dt) {
       const dx = cop.x - b.x, dz = cop.z - b.z;
       if (dx * dx + dz * dz < 2) {
         scene.remove(cop.mesh); state.policeOfficers.splice(j, 1);
-        scene.remove(b.mesh); state.playerBullets.splice(i, 1); break;
+        scene.remove(b.mesh); state.playerBullets.splice(i, 1);
+        registerPoliceKill(); break;
       }
     }
   }
@@ -461,6 +497,18 @@ export function updateDeath(dt) {
       for (const b of state.playerBullets) scene.remove(b.mesh);
       for (const b of state.policeBullets) scene.remove(b.mesh);
       state.playerBullets = []; state.policeBullets = [];
+      if (state.helicopter) {
+        scene.remove(state.helicopter.mesh);
+        for (const m of state.helicopter.missiles) scene.remove(m.mesh);
+        state.helicopter = null;
+      }
+      for (const tank of state.tanks) {
+        for (const s of tank.shells) scene.remove(s.mesh);
+        scene.remove(tank.mesh);
+      }
+      state.tanks = [];
+      state.killCount = 0;
+      state.policeKilled = 0;
 
       if (state.isInVehicle) { state.isInVehicle = false; state.currentVehicle = null; }
       state.player.x = 0; state.player.y = 0; state.player.z = 0;

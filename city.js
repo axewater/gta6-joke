@@ -5,20 +5,21 @@ import {
   GRID, BLOCK, ROAD, CELL, CITY_SIZE, HALF_CITY,
   BUILDING_COLORS, NEON_COLORS,
   DOWNTOWN_COLORS, RESIDENTIAL_COLORS, INDUSTRIAL_COLORS, SHOP_SIGN_COLORS,
-  RAMP_WIDTH, RAMP_LENGTH, RAMP_HEIGHT
+  RAMP_WIDTH, RAMP_LENGTH, RAMP_HEIGHT,
+  TRAFFIC_GREEN_TIME, TRAFFIC_YELLOW_TIME
 } from './constants.js';
 
 // ── District Map ────────────────────────────────────────────────────────
 // row = gi (north→south), col = gj (west→east)
 const DISTRICT_MAP = [
-  ['IND','IND','IND','COM','COM','COM','COM','RES','RES','RES'],
-  ['IND','IND','COM','COM','COM','COM','RES','RES','RES','RES'],
-  ['COM','COM','COM','DT', 'DT', 'DT', 'COM','COM','RES','RES'],
-  ['COM','COM','DT', 'DT', 'DT', 'DT', 'DT', 'COM','COM','PARK'],
+  ['IND','IND','COM','COM','COM','COM','COM','COM','RES','RES'],
+  ['IND','COM','COM','DT', 'DT', 'DT', 'DT', 'COM','COM','RES'],
+  ['COM','COM','DT', 'DT', 'DT', 'DT', 'DT', 'DT', 'COM','RES'],
+  ['COM','DT', 'DT', 'DT', 'DT', 'DT', 'DT', 'DT', 'COM','PARK'],
+  ['COM','DT', 'DT', 'DT', 'DT', 'DT', 'DT', 'DT', 'COM','COM'],
   ['COM','COM','DT', 'DT', 'DT', 'DT', 'DT', 'COM','COM','COM'],
-  ['COM','PARK','DT','DT', 'DT', 'DT', 'COM','COM','COM','COM'],
   ['RES','COM','COM','COM','COM','COM','COM','COM','COM','RES'],
-  ['RES','RES','COM','COM','PARK','COM','COM','COM','RES','RES'],
+  ['RES','RES','COM','COM','COM','COM','COM','COM','RES','RES'],
   ['RES','RES','RES','COM','COM','COM','COM','RES','RES','RES'],
   ['RES','RES','RES','RES','COM','COM','RES','RES','RES','RES'],
 ];
@@ -151,13 +152,37 @@ function addNeonSign(cx, cz, w, d, height, bounds, chance) {
 // ── Building Type Generators ────────────────────────────────────────────
 
 function createSkyscraper(blockCenterX, blockCenterZ) {
-  const count = 2 + Math.floor(Math.random() * 3); // 2-4
+  const count = 4 + Math.floor(Math.random() * 4); // 4-7
+  const antennaMat = new THREE.MeshStandardMaterial({ color: 0xAAAAAA, metalness: 0.8, roughness: 0.3 });
+
+  // 15% chance of a supertall landmark per block (1 max)
+  if (Math.random() < 0.15) {
+    const stH = 250 + Math.random() * 100;
+    const stW = 10 + Math.random() * 6, stD = 10 + Math.random() * 6;
+    const color = pick(DOWNTOWN_COLORS);
+    addBuilding(blockCenterX, blockCenterZ, stW, stH, stD, color, true);
+    pushAABB(blockCenterX, blockCenterZ, stW, stD, stH);
+    const spire = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.1, 0.4, 25, 6),
+      new THREE.MeshStandardMaterial({ color: 0xAAAAAA, metalness: 0.9, roughness: 0.2 })
+    );
+    spire.position.set(blockCenterX, stH + 12.5, blockCenterZ);
+    scene.add(spire);
+  }
+
+  const gridCols = 2;
+  const numRows = Math.ceil(count / gridCols);
+  const cellW = BLOCK / gridCols;
+  const cellD = BLOCK / numRows;
+
   for (let b = 0; b < count; b++) {
-    const height = 50 + Math.random() * 40;
-    const bw = 12 + Math.random() * (BLOCK / count - 16);
-    const bd = 12 + Math.random() * (BLOCK / count - 16);
-    const offX = (b % 2) * (BLOCK / 2 - bw / 2) - (BLOCK / 4 - bw / 4) + (Math.random() - 0.5) * 4;
-    const offZ = Math.floor(b / 2) * (BLOCK / 2 - bd / 2) - (BLOCK / 4 - bd / 4) + (Math.random() - 0.5) * 4;
+    const height = 80 + Math.random() * 120; // 80-200
+    const col = b % gridCols;
+    const row = Math.floor(b / gridCols);
+    const bw = Math.min(cellW * 0.75, 14 + Math.random() * 8);
+    const bd = Math.min(cellD * 0.75, 14 + Math.random() * 8);
+    const offX = (col + 0.5) * cellW - BLOCK / 2 + (Math.random() - 0.5) * 4;
+    const offZ = (row + 0.5) * cellD - BLOCK / 2 + (Math.random() - 0.5) * 4;
     const bx = blockCenterX + offX;
     const bz = blockCenterZ + offZ;
     const c = clampToBlock(bx, bz, bw, bd, blockCenterX, blockCenterZ);
@@ -170,7 +195,6 @@ function createSkyscraper(blockCenterX, blockCenterZ) {
     const bounds = pushAABB(cx, cz, actualW, actualD, height);
 
     // Antenna/spire on top (decorative)
-    const antennaMat = new THREE.MeshStandardMaterial({ color: 0xAAAAAA, metalness: 0.8, roughness: 0.3 });
     const antenna = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.3, 8, 6), antennaMat);
     antenna.position.set(cx, height + 4, cz);
     scene.add(antenna);
@@ -268,14 +292,11 @@ function createHouse(blockCenterX, blockCenterZ) {
     addBuilding(cx, cz, actualW, height, actualD, color, false);
     pushAABB(cx, cz, actualW, actualD, height);
 
-    // Peaked roof accent (decorative rotated box)
+    // Flat roof cornice (slight overhang, no rotation artifacts)
     const roofColor = 0x8B4513 + Math.floor(Math.random() * 0x222222);
     const roofMat = new THREE.MeshStandardMaterial({ color: roofColor, roughness: 0.9 });
-    const roofGeo = new THREE.BoxGeometry(actualW + 1, actualD * 0.7, actualD + 1);
-    const roof = new THREE.Mesh(roofGeo, roofMat);
-    roof.position.set(cx, height + actualD * 0.2, cz);
-    roof.rotation.z = Math.PI / 4;
-    roof.scale.set(1, 0.3, 1);
+    const roof = new THREE.Mesh(new THREE.BoxGeometry(actualW + 1.5, 0.7, actualD + 1.5), roofMat);
+    roof.position.set(cx, height + 0.35, cz);
     scene.add(roof);
 
     // Small fence around base (decorative, no AABB)
@@ -658,8 +679,14 @@ export function createCity() {
   ground.receiveShadow = true;
   scene.add(ground);
 
-  // Wet road material - neon vice city style
-  const roadMat = new THREE.MeshStandardMaterial({ color: 0x1a1a2e, roughness: 0.05, metalness: 0.8 });
+  // Road material — dry by default, wet during rain
+  const roadMat = new THREE.MeshStandardMaterial({ color: 0x1a1a2e, roughness: 0.75, metalness: 0.05 });
+  state.roadMaterial = roadMat;
+  const puddleMat = new THREE.MeshStandardMaterial({
+    color: 0x334466, emissive: 0x001133, emissiveIntensity: 0.3,
+    roughness: 0.0, metalness: 0.9, transparent: true, opacity: 0
+  });
+  state.puddleMaterial = puddleMat;
   const sidewalkMat = new THREE.MeshStandardMaterial({ color: 0xccbbaa, roughness: 0.7 });
   const yellowMat = new THREE.MeshStandardMaterial({ color: 0xddcc00, roughness: 0.5 });
   const whiteMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5 });
@@ -672,10 +699,6 @@ export function createCity() {
     road.position.set(0, 0.01, z);
     scene.add(road);
 
-    const puddleMat = new THREE.MeshStandardMaterial({
-      color: 0x334466, emissive: 0x001133, emissiveIntensity: 0.3,
-      roughness: 0.0, metalness: 0.9, transparent: true, opacity: 0.35
-    });
     const puddle = new THREE.Mesh(new THREE.PlaneGeometry(CITY_SIZE, ROAD * 0.6), puddleMat);
     puddle.rotation.x = -Math.PI / 2;
     puddle.position.set(0, 0.02, z);
@@ -713,10 +736,6 @@ export function createCity() {
     road.position.set(x, 0.015, 0);
     scene.add(road);
 
-    const puddleMat = new THREE.MeshStandardMaterial({
-      color: 0x334466, emissive: 0x001133, emissiveIntensity: 0.3,
-      roughness: 0.0, metalness: 0.9, transparent: true, opacity: 0.35
-    });
     const puddle = new THREE.Mesh(new THREE.PlaneGeometry(ROAD * 0.6, CITY_SIZE), puddleMat);
     puddle.rotation.x = -Math.PI / 2;
     puddle.position.set(x, 0.025, 0);
@@ -817,9 +836,9 @@ export function createCity() {
 
 export function createOceanAndBeach() {
   const sandMat = new THREE.MeshStandardMaterial({ color: 0xF4D6A0, roughness: 0.95 });
-  const sand = new THREE.Mesh(new THREE.PlaneGeometry(CITY_SIZE + 200, 60), sandMat);
+  const sand = new THREE.Mesh(new THREE.PlaneGeometry(CITY_SIZE + 200, 70), sandMat);
   sand.rotation.x = -Math.PI / 2;
-  sand.position.set(0, 0.05, HALF_CITY + 30);
+  sand.position.set(0, 0.05, HALF_CITY + 35);
   sand.receiveShadow = true;
   scene.add(sand);
 
@@ -843,10 +862,10 @@ export function createOceanAndBeach() {
         vec3 pos = position;
 
         float h = 0.0;
-        h += sin(pos.x * 0.05 + time * 1.5) * 1.5;
-        h += sin(pos.y * 0.08 + time * 2.0 + 1.0) * 0.8;
-        h += sin((pos.x + pos.y) * 0.03 + time) * 2.0;
-        h += sin(pos.x * 0.12 - time * 0.8) * 0.5;
+        h += sin(pos.x * 0.05 + time * 1.5) * 0.6;
+        h += sin(pos.y * 0.08 + time * 2.0 + 1.0) * 0.32;
+        h += sin((pos.x + pos.y) * 0.03 + time) * 0.8;
+        h += sin(pos.x * 0.12 - time * 0.8) * 0.2;
 
         pos.z = h;
         vWaveHeight = h;
@@ -887,7 +906,7 @@ export function createOceanAndBeach() {
         color += vec3(1.0, 0.9, 0.7) * spec * 2.0;
 
         // Foam at wave crests
-        float foam = smoothstep(2.5, 4.0, vWaveHeight);
+        float foam = smoothstep(1.0, 1.6, vWaveHeight);
         color = mix(color, vec3(0.9, 0.95, 1.0), foam * 0.4);
 
         gl_FragColor = vec4(color, 0.85);
@@ -900,10 +919,17 @@ export function createOceanAndBeach() {
 
   const ocean = new THREE.Mesh(oceanGeo, oceanMat);
   ocean.rotation.x = -Math.PI / 2;
-  ocean.position.set(0, -0.3, HALF_CITY + 210);
+  ocean.position.set(0, 0, HALF_CITY + 150);
   scene.add(ocean);
   state.ocean = ocean;
   state.oceanMaterial = oceanMat;
+
+  // Ocean floor plane to prevent see-through at shallow angles
+  const floorMat = new THREE.MeshStandardMaterial({ color: 0x001830, roughness: 1.0 });
+  const floorPlane = new THREE.Mesh(new THREE.PlaneGeometry(CITY_SIZE + 400, 300), floorMat);
+  floorPlane.rotation.x = -Math.PI / 2;
+  floorPlane.position.set(0, -1.5, HALF_CITY + 150);
+  scene.add(floorPlane);
 }
 
 export function createPalmTrees() {
@@ -1089,4 +1115,229 @@ export function createGunStore() {
   group.position.set(x, 0, z);
   scene.add(group);
   state.gunStore = { mesh: group, icon, x, z };
+}
+
+// ── Traffic Lights ──────────────────────────────────────────────────────
+
+// Shared materials (swapped onto meshes each frame)
+const matRedOn = new THREE.MeshStandardMaterial({ color: 0xff0000, emissive: 0xff0000, emissiveIntensity: 2.0 });
+const matRedOff = new THREE.MeshStandardMaterial({ color: 0x330000, roughness: 0.9 });
+const matYellowOn = new THREE.MeshStandardMaterial({ color: 0xffcc00, emissive: 0xffcc00, emissiveIntensity: 2.0 });
+const matYellowOff = new THREE.MeshStandardMaterial({ color: 0x332200, roughness: 0.9 });
+const matGreenOn = new THREE.MeshStandardMaterial({ color: 0x00ff00, emissive: 0x00ff00, emissiveIntensity: 2.0 });
+const matGreenOff = new THREE.MeshStandardMaterial({ color: 0x003300, roughness: 0.9 });
+
+export function createTrafficLights() {
+  const poleMat = new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.8 });
+  const housingMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.9 });
+  const poleGeo = new THREE.CylinderGeometry(0.1, 0.1, 7, 6);
+  const housingGeo = new THREE.BoxGeometry(0.5, 1.4, 0.5);
+  const bulbGeo = new THREE.SphereGeometry(0.12, 6, 6);
+
+  // Build 2D grid for quick lookup
+  state.trafficLightGrid = [];
+  for (let r = 0; r <= GRID; r++) state.trafficLightGrid[r] = new Array(GRID + 1).fill(null);
+
+  for (let row = 1; row < GRID; row++) {
+    for (let col = 1; col < GRID; col++) {
+      const ix = -HALF_CITY + col * CELL;
+      const iz = -HALF_CITY + row * CELL;
+
+      // Place pole on NE corner of intersection (on sidewalk edge)
+      const px = ix + ROAD / 2 + 0.5;
+      const pz = iz - ROAD / 2 - 0.5;
+
+      const group = new THREE.Group();
+
+      // Pole
+      const pole = new THREE.Mesh(poleGeo, poleMat);
+      pole.position.set(0, 3.5, 0);
+      group.add(pole);
+
+      // Housing at top
+      const housing = new THREE.Mesh(housingGeo, housingMat);
+      housing.position.set(0, 7.5, 0);
+      group.add(housing);
+
+      // NS lights (z faces — visible to traffic heading north/south)
+      const nsRed = new THREE.Mesh(bulbGeo, matRedOff);
+      nsRed.position.set(0, 7.9, -0.26);
+      group.add(nsRed);
+      const nsYellow = new THREE.Mesh(bulbGeo, matYellowOff);
+      nsYellow.position.set(0, 7.5, -0.26);
+      group.add(nsYellow);
+      const nsGreen = new THREE.Mesh(bulbGeo, matGreenOn);
+      nsGreen.position.set(0, 7.1, -0.26);
+      group.add(nsGreen);
+
+      // NS back face
+      const nsRedB = new THREE.Mesh(bulbGeo, matRedOff);
+      nsRedB.position.set(0, 7.9, 0.26);
+      group.add(nsRedB);
+      const nsYellowB = new THREE.Mesh(bulbGeo, matYellowOff);
+      nsYellowB.position.set(0, 7.5, 0.26);
+      group.add(nsYellowB);
+      const nsGreenB = new THREE.Mesh(bulbGeo, matGreenOn);
+      nsGreenB.position.set(0, 7.1, 0.26);
+      group.add(nsGreenB);
+
+      // EW lights (x faces — visible to traffic heading east/west)
+      const ewRed = new THREE.Mesh(bulbGeo, matRedOn);
+      ewRed.position.set(-0.26, 7.9, 0);
+      group.add(ewRed);
+      const ewYellow = new THREE.Mesh(bulbGeo, matYellowOff);
+      ewYellow.position.set(-0.26, 7.5, 0);
+      group.add(ewYellow);
+      const ewGreen = new THREE.Mesh(bulbGeo, matGreenOff);
+      ewGreen.position.set(-0.26, 7.1, 0);
+      group.add(ewGreen);
+
+      // EW back face
+      const ewRedB = new THREE.Mesh(bulbGeo, matRedOn);
+      ewRedB.position.set(0.26, 7.9, 0);
+      group.add(ewRedB);
+      const ewYellowB = new THREE.Mesh(bulbGeo, matYellowOff);
+      ewYellowB.position.set(0.26, 7.5, 0);
+      group.add(ewYellowB);
+      const ewGreenB = new THREE.Mesh(bulbGeo, matGreenOff);
+      ewGreenB.position.set(0.26, 7.1, 0);
+      group.add(ewGreenB);
+
+      group.position.set(px, 0, pz);
+      scene.add(group);
+
+      // Stagger initial phase so not all lights change at once
+      const initialPhase = ((row + col) % 2 === 0) ? 0 : 2;
+      const initialTimer = ((row * 3 + col * 7) % 10) / 10 * TRAFFIC_GREEN_TIME;
+
+      const tl = {
+        row, col, x: ix, z: iz,
+        phase: initialPhase, // 0=NS green, 1=NS yellow, 2=EW green, 3=EW yellow
+        timer: initialTimer,
+        nsRed: [nsRed, nsRedB],
+        nsYellow: [nsYellow, nsYellowB],
+        nsGreen: [nsGreen, nsGreenB],
+        ewRed: [ewRed, ewRedB],
+        ewYellow: [ewYellow, ewYellowB],
+        ewGreen: [ewGreen, ewGreenB],
+      };
+
+      state.trafficLights.push(tl);
+      state.trafficLightGrid[row][col] = tl;
+    }
+  }
+}
+
+export function updateTrafficLights(dt) {
+  for (const tl of state.trafficLights) {
+    tl.timer += dt;
+
+    const phaseDur = (tl.phase === 0 || tl.phase === 2) ? TRAFFIC_GREEN_TIME : TRAFFIC_YELLOW_TIME;
+    if (tl.timer >= phaseDur) {
+      tl.timer -= phaseDur;
+      tl.phase = (tl.phase + 1) % 4;
+    }
+
+    // NS state: green=phase0, yellow=phase1, red=phase2|3
+    const nsS = tl.phase === 0 ? 'green' : tl.phase === 1 ? 'yellow' : 'red';
+    for (const m of tl.nsRed) m.material = nsS === 'red' ? matRedOn : matRedOff;
+    for (const m of tl.nsYellow) m.material = nsS === 'yellow' ? matYellowOn : matYellowOff;
+    for (const m of tl.nsGreen) m.material = nsS === 'green' ? matGreenOn : matGreenOff;
+
+    // EW state: green=phase2, yellow=phase3, red=phase0|1
+    const ewS = tl.phase === 2 ? 'green' : tl.phase === 3 ? 'yellow' : 'red';
+    for (const m of tl.ewRed) m.material = ewS === 'red' ? matRedOn : matRedOff;
+    for (const m of tl.ewYellow) m.material = ewS === 'yellow' ? matYellowOn : matYellowOff;
+    for (const m of tl.ewGreen) m.material = ewS === 'green' ? matGreenOn : matGreenOff;
+  }
+}
+
+// ── Mountains ─────────────────────────────────────────────────────────────
+export function createMountains() {
+  // Extended background terrain under mountain areas (y=-0.1 so city ground covers it)
+  const terrainMat = new THREE.MeshStandardMaterial({ color: 0x3d3830, roughness: 1.0 });
+  const bgGround = new THREE.Mesh(new THREE.PlaneGeometry(CITY_SIZE + 900, CITY_SIZE + 900), terrainMat);
+  bgGround.rotation.x = -Math.PI / 2;
+  bgGround.position.y = -0.1;
+  scene.add(bgGround);
+
+  const snowMat = new THREE.MeshStandardMaterial({ color: 0xeeeeff, roughness: 0.55 });
+  const rockColors = [0x6b6560, 0x7a7065, 0x5a5550, 0x706860, 0x6a6055, 0x807870];
+
+  function makeMountain(cx, cz, height, greenness) {
+    const baseRadius = height * 0.5 + 15 + Math.random() * 20;
+    const segs = 6 + Math.floor(Math.random() * 3);
+    const rotY = Math.random() * Math.PI * 2;
+
+    // Rocky body
+    const rockMat = new THREE.MeshStandardMaterial({
+      color: rockColors[Math.floor(Math.random() * rockColors.length)],
+      roughness: 0.92
+    });
+    const rock = new THREE.Mesh(new THREE.ConeGeometry(baseRadius, height, segs), rockMat);
+    rock.position.set(cx, height / 2, cz);
+    rock.rotation.y = rotY;
+    scene.add(rock);
+
+    // Forest layer — height controlled by greenness (0=sparse, 1=lush)
+    const forestTop = height * (0.35 + greenness * 0.22);
+    const forestRadius = baseRadius * (0.72 + greenness * 0.15);
+    const gv = 0.2 + greenness * 0.5;
+    const forestMat = new THREE.MeshStandardMaterial({
+      color: new THREE.Color(0.05 + greenness * 0.02, gv, 0.04),
+      roughness: 0.95
+    });
+    const forest = new THREE.Mesh(new THREE.ConeGeometry(forestRadius, forestTop, segs), forestMat);
+    forest.position.set(cx, forestTop / 2, cz);
+    forest.rotation.y = rotY + 0.3;
+    scene.add(forest);
+
+    // Snow cap for mountains taller than 130 units
+    if (height > 130) {
+      const snowFrac = Math.min(1, (height - 130) / 120);
+      const snowH = height * (0.12 + snowFrac * 0.1);
+      const snowR = baseRadius * (0.12 + snowFrac * 0.06);
+      const snow = new THREE.Mesh(new THREE.ConeGeometry(snowR, snowH, segs), snowMat);
+      snow.position.set(cx, height - snowH / 2 + 0.5, cz);
+      scene.add(snow);
+    }
+
+    // Collision footprint
+    const fr = baseRadius * 0.65;
+    state.buildings.push({ minX: cx - fr, maxX: cx + fr, minZ: cz - fr, maxZ: cz + fr, height });
+  }
+
+  function addRange(xMin, xMax, zMin, zMax, count) {
+    for (let i = 0; i < count; i++) {
+      const cx = xMin + Math.random() * (xMax - xMin);
+      const cz = zMin + Math.random() * (zMax - zMin);
+      const height = 80 + Math.random() * 220; // 80–300
+      const greenness = 0.15 + Math.random() * 0.85;
+      makeMountain(cx, cz, height, greenness);
+    }
+  }
+
+  const pad = 40;   // start this far outside the city edge
+  const deep = 290; // depth of the mountain range
+
+  // North range
+  addRange(-HALF_CITY - 100, HALF_CITY + 100, -HALF_CITY - deep, -HALF_CITY - pad, 28);
+  // West range
+  addRange(-HALF_CITY - deep, -HALF_CITY - pad, -HALF_CITY - 100, HALF_CITY + 100, 28);
+  // East range
+  addRange(HALF_CITY + pad, HALF_CITY + deep, -HALF_CITY - 100, HALF_CITY + 100, 28);
+  // Corner fills (NW, NE) so mountains meet at corners
+  addRange(-HALF_CITY - deep, -HALF_CITY - pad, -HALF_CITY - deep, -HALF_CITY - pad, 10);
+  addRange(HALF_CITY + pad, HALF_CITY + deep, -HALF_CITY - deep, -HALF_CITY - pad, 10);
+
+  // Invisible solid walls — block player/car on all 4 sides
+  const BIG = 2000;
+  // North wall
+  state.buildings.push({ minX: -BIG, maxX: BIG, minZ: -BIG, maxZ: -HALF_CITY - 35, height: BIG });
+  // West wall
+  state.buildings.push({ minX: -BIG, maxX: -HALF_CITY - 35, minZ: -BIG, maxZ: BIG, height: BIG });
+  // East wall
+  state.buildings.push({ minX: HALF_CITY + 35, maxX: BIG, minZ: -BIG, maxZ: BIG, height: BIG });
+  // South/ocean wall — drowning is handled in player.js; this stops cars going too far out
+  state.buildings.push({ minX: -BIG, maxX: BIG, minZ: HALF_CITY + 72, maxZ: BIG, height: BIG });
 }
