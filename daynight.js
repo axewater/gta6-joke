@@ -17,7 +17,7 @@ export function updateDayNight(dt) {
   state.sun.position.set(sunXZ, Math.max(sunY, -20), 80);
   state.sun.intensity = Math.max(0, Math.min(1.5, sunY / 60));
 
-  const nightColor = new THREE.Color(0x05030f);  // deep purple night
+  const nightColor = new THREE.Color(0x05030f);
   const sunsetColor = new THREE.Color(0xFFA062);
   const dayColor = new THREE.Color(0x87ceeb);
 
@@ -40,29 +40,108 @@ export function updateDayNight(dt) {
     skyColor = sunsetColor.clone().lerp(nightColor, f);
   }
 
-  scene.background = skyColor;
   scene.fog.color = skyColor;
 
   const isNight = (t < 0.2 || t > 0.8);
 
-  // Ambient
+  // ── Sky Dome ──────────────────────────────────────────────────────────
+  if (state.skyDomeMaterial) {
+    state.skyDomeMaterial.uniforms.horizonColor.value.copy(skyColor);
+
+    const nightZenith = new THREE.Color(0x020108);
+    const sunsetZenith = new THREE.Color(0x6B3A7A);
+    const dayZenith = new THREE.Color(0x1a4a8a);
+
+    let zenithColor;
+    if (t < 0.2 || t > 0.8) {
+      zenithColor = nightZenith;
+    } else if (t < 0.3) {
+      const f = (t - 0.2) / 0.1;
+      zenithColor = nightZenith.clone().lerp(sunsetZenith, f);
+    } else if (t < 0.4) {
+      const f = (t - 0.3) / 0.1;
+      zenithColor = sunsetZenith.clone().lerp(dayZenith, f);
+    } else if (t < 0.6) {
+      zenithColor = dayZenith.clone();
+    } else if (t < 0.7) {
+      const f = (t - 0.6) / 0.1;
+      zenithColor = dayZenith.clone().lerp(sunsetZenith, f);
+    } else {
+      const f = (t - 0.7) / 0.1;
+      zenithColor = sunsetZenith.clone().lerp(nightZenith, f);
+    }
+
+    state.skyDomeMaterial.uniforms.zenithColor.value.copy(zenithColor);
+  }
+
+  // ── Stars ─────────────────────────────────────────────────────────────
+  if (state.starMaterial) {
+    const starTarget = isNight ? 0.8 : 0;
+    state.starMaterial.opacity += (starTarget - state.starMaterial.opacity) * dt * 2;
+  }
+
+  // ── Sun Mesh ──────────────────────────────────────────────────────────
+  if (state.sunMesh) {
+    const sunNorm = state.sun.position.clone().normalize();
+    state.sunMesh.position.copy(sunNorm).multiplyScalar(400);
+    state.sunMesh.visible = state.sun.intensity > 0.1;
+  }
+
+  // ── Moon Mesh ─────────────────────────────────────────────────────────
+  if (state.moonMesh) {
+    const sunNorm = state.sun.position.clone().normalize();
+    state.moonMesh.position.copy(sunNorm).multiplyScalar(-400);
+    state.moonMesh.visible = isNight;
+  }
+
+  // ── Environment Map ───────────────────────────────────────────────────
+  if (state.envCanvases && state.envCubeTexture) {
+    const topCanvas = state.envCanvases[2];
+    const ctx = topCanvas.getContext('2d');
+    const r = Math.floor(skyColor.r * 255);
+    const g = Math.floor(skyColor.g * 255);
+    const b = Math.floor(skyColor.b * 255);
+    ctx.fillStyle = `rgb(${r},${g},${b})`;
+    ctx.fillRect(0, 0, 64, 64);
+    state.envCubeTexture.needsUpdate = true;
+  }
+
+  // ── Cinematic Pass ────────────────────────────────────────────────────
+  if (state.cinematicPass) {
+    state.cinematicPass.uniforms.time.value = state.elapsedTime;
+    const grainTarget = isNight ? 0.06 : 0.03;
+    const vignetteTarget = isNight ? 0.6 : 0.4;
+    state.cinematicPass.uniforms.grainIntensity.value +=
+      (grainTarget - state.cinematicPass.uniforms.grainIntensity.value) * dt * 2;
+    state.cinematicPass.uniforms.vignetteStrength.value +=
+      (vignetteTarget - state.cinematicPass.uniforms.vignetteStrength.value) * dt * 2;
+  }
+
+  // ── Ocean Water ───────────────────────────────────────────────────────
+  if (state.oceanMaterial) {
+    state.oceanMaterial.uniforms.skyColor.value.copy(skyColor);
+    const sunNorm = state.sun.position.clone().normalize();
+    state.oceanMaterial.uniforms.sunDirection.value.copy(sunNorm);
+  }
+
+  // ── Ambient ───────────────────────────────────────────────────────────
   const ambientTarget = isNight ? 0.08 : 0.6;
   state.ambient.intensity += (ambientTarget - state.ambient.intensity) * dt * 2;
 
-  // Bloom strength lerp
+  // ── Bloom ─────────────────────────────────────────────────────────────
   if (state.bloomPass) {
     const bloomTarget = isNight ? BLOOM_STRENGTH_NIGHT : BLOOM_STRENGTH_DAY;
     state.bloomPass.strength += (bloomTarget - state.bloomPass.strength) * dt * 1.5;
   }
 
-  // Street lights
+  // ── Street lights ─────────────────────────────────────────────────────
   const lightTarget = isNight ? 1.0 : 0.2;
   for (const sl of state.streetLights) {
     sl.pointLight.intensity += (lightTarget - sl.pointLight.intensity) * dt * 2;
     sl.bulb.material.emissiveIntensity += (lightTarget - sl.bulb.material.emissiveIntensity) * dt * 2;
   }
 
-  // Neon point lights pulse at night
+  // ── Neon ──────────────────────────────────────────────────────────────
   const neonIntensity = isNight
     ? 3.5 + Math.sin(state.elapsedTime * 3) * 0.5
     : 0.5;
@@ -70,7 +149,7 @@ export function updateDayNight(dt) {
     pl.intensity += (neonIntensity - pl.intensity) * dt * 4;
   }
 
-  // Building window glow at night
+  // ── Building window glow ──────────────────────────────────────────────
   const glowTarget = isNight ? 0.3 : 0;
   for (const mesh of state.buildingMeshes) {
     if (Array.isArray(mesh.material)) {
@@ -84,10 +163,25 @@ export function updateDayNight(dt) {
 }
 
 export function updateClouds(dt) {
+  const t = state.gameTime;
+  const isNight = (t < 0.2 || t > 0.8);
+
+  let cloudColor;
+  if (isNight) {
+    cloudColor = new THREE.Color(0x1a1a2a);
+  } else if (t < 0.3 || t > 0.7) {
+    cloudColor = new THREE.Color(0xFFAA77);
+  } else {
+    cloudColor = new THREE.Color(0xFFEEDD);
+  }
+
   for (const cloud of state.clouds) {
     cloud.mesh.position.x += cloud.speed * dt;
     if (cloud.mesh.position.x > CITY_SIZE) {
       cloud.mesh.position.x = -CITY_SIZE;
+    }
+    if (cloud.material) {
+      cloud.material.color.lerp(cloudColor, dt * 2);
     }
   }
 }

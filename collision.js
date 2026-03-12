@@ -21,17 +21,28 @@ export function checkPlayerCarNpcCollision() {
     const dist = Math.sqrt(dx * dx + dz * dz);
 
     if (dist < 3.2) {
-      // Launch ragdoll
       launchNpcRagdoll(npc, carSpeed, v.rotation);
-
-      // Slight speed reduction
       v.speed *= 0.9;
-
-      // Camera shake
       state.cameraShake.intensity = 0.8;
       state.cameraShake.timer = 0.5;
+      commitCrime();
+    }
+  }
 
-      // Crime
+  // Also check police officers
+  for (const cop of state.policeOfficers) {
+    if (cop.ragdoll && cop.ragdoll.active) continue;
+    if (cop.dead) continue;
+
+    const dx = cop.x - v.x;
+    const dz = cop.z - v.z;
+    const dist = Math.sqrt(dx * dx + dz * dz);
+
+    if (dist < 3.2) {
+      launchNpcRagdoll(cop, carSpeed, v.rotation);
+      v.speed *= 0.9;
+      state.cameraShake.intensity = 0.8;
+      state.cameraShake.timer = 0.5;
       commitCrime();
     }
   }

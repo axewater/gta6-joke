@@ -125,58 +125,113 @@ export function updateVehicle(dt) {
   }
 
   // ── Ramp physics ──────────────────────────────────────────────────
-  if (!v.vehicleY) v.vehicleY = 0;
-  if (!v.launchVY) v.launchVY = 0;
-  if (!v.airborne) v.airborne = false;
+  if (v.vehicleY === undefined) v.vehicleY = 0;
+  if (v.launchVY === undefined) v.launchVY = 0;
+  if (v.airborne === undefined) v.airborne = false;
+  if (v.pitchAngle === undefined) v.pitchAngle = 0;
+  if (v.mesh.rotation.order !== 'YXZ') v.mesh.rotation.order = 'YXZ';
 
   let onRamp = false;
-  for (const ramp of state.ramps) {
-    // Check overlap with ramp AABB
-    const overlapX = Math.min(v.x + v.halfW, ramp.maxX) - Math.max(v.x - v.halfW, ramp.minX);
-    const overlapZ = Math.min(v.z + v.halfD, ramp.maxZ) - Math.max(v.z - v.halfD, ramp.minZ);
-    if (overlapX > 0 && overlapZ > 0) {
-      onRamp = true;
-      // Calculate progress along ramp direction (0=bottom, 1=top)
-      const cosR = Math.cos(ramp.rotY), sinR = Math.sin(ramp.rotY);
-      const localZ = -(v.x - ramp.x) * sinR + (v.z - ramp.z) * cosR;
-      // localZ ranges from -length/2 (top/high) to +length/2 (bottom/low)
-      const progress = 1 - (localZ + ramp.length / 2) / ramp.length;
-      const clampedProgress = Math.max(0, Math.min(1, progress));
-      v.vehicleY = clampedProgress * ramp.height;
-      v.airborne = false;
-      v.launchVY = 0;
+  let targetPitch = 0;
 
-      // Launch at top edge
-      if (clampedProgress > 0.9 && Math.abs(v.speed) > 5) {
-        v.airborne = true;
-        v.launchVY = Math.abs(v.speed) * 0.5 + 5;
-        v.vehicleY = ramp.height;
+  // Skip ramp grounding when airborne — otherwise the ramp AABB
+  // immediately cancels the launch on the next frame
+  if (!v.airborne) {
+    for (const ramp of state.ramps) {
+      const overlapX = Math.min(v.x + v.halfW, ramp.maxX) - Math.max(v.x - v.halfW, ramp.minX);
+      const overlapZ = Math.min(v.z + v.halfD, ramp.maxZ) - Math.max(v.z - v.halfD, ramp.minZ);
+      if (overlapX > 0 && overlapZ > 0) {
+        onRamp = true;
+        // Calculate progress along ramp direction (0=bottom, 1=top)
+        const cosR = Math.cos(ramp.rotY), sinR = Math.sin(ramp.rotY);
+        const localZ = -(v.x - ramp.x) * sinR + (v.z - ramp.z) * cosR;
+        const progress = 1 - (localZ + ramp.length / 2) / ramp.length;
+        const clampedProgress = Math.max(0, Math.min(1, progress));
+        v.vehicleY = clampedProgress * ramp.height;
+
+        // Pitch the car to match the ramp slope
+        // rampAngle = slope angle, projected onto the car's forward direction
+        const rampAngle = Math.atan2(ramp.height, ramp.length);
+        targetPitch = rampAngle * Math.cos(v.rotation - ramp.rotY);
+
+        // Launch at top edge
+        if (clampedProgress > 0.95 && Math.abs(v.speed) > 2) {
+          v.airborne = true;
+          v.launchVY = Math.abs(v.speed) * 0.4 + 3;
+          v.vehicleY = ramp.height;
+          v.pitchAngle = targetPitch;
+        }
+        break;
       }
-      break;
     }
   }
 
   if (v.airborne) {
     v.launchVY -= 30 * dt; // gravity
     v.vehicleY += v.launchVY * dt;
+
+    // Gradually pitch back toward level while airborne
+    v.pitchAngle += (0 - v.pitchAngle) * dt * 2;
+
     if (v.vehicleY <= 0) {
       v.vehicleY = 0;
       v.airborne = false;
       v.launchVY = 0;
+      v.pitchAngle = 0;
       // Landing camera shake
       state.cameraShake.intensity = 1.0;
       state.cameraShake.timer = 0.5;
     }
-  } else if (!onRamp) {
+  } else if (onRamp) {
+    // Smoothly interpolate pitch while on ramp
+    v.pitchAngle += (targetPitch - v.pitchAngle) * dt * 10;
+  } else {
+    // Smoothly return to level off-ramp
+    v.pitchAngle += (0 - v.pitchAngle) * dt * 8;
     v.vehicleY = 0;
   }
 
   v.mesh.position.set(v.x, v.vehicleY, v.z);
   v.mesh.rotation.y = v.rotation;
+  v.mesh.rotation.x = v.pitchAngle;
 
   const wheelSpin = v.speed * dt * 3;
   if (v.wheels) {
     for (const w of v.wheels) w.rotation.x += wheelSpin;
+  }
+
+  // Tire smoke on hard braking or sharp turning
+  const isBraking = k['KeyS'] && Math.abs(v.speed) > 8;
+  const isTurning = (k['KeyA'] || k['KeyD']) && Math.abs(v.speed) > 12;
+  if ((isBraking || isTurning) && !v.airborne && Math.random() < 0.3) {
+    const sinR = Math.sin(v.rotation);
+    const cosR = Math.cos(v.rotation);
+    const rearX = v.x - sinR * 2;
+    const rearZ = v.z - cosR * 2;
+    const geo = new THREE.SphereGeometry(0.2, 4, 4);
+    const mat = new THREE.MeshBasicMaterial({ color: 0xCCCCCC, transparent: true, opacity: 0.5 });
+    const p = new THREE.Mesh(geo, mat);
+    p.position.set(rearX + (Math.random() - 0.5) * 1.5, 0.3, rearZ + (Math.random() - 0.5) * 1.5);
+    p.userData = { life: 0.8, maxLife: 0.8 };
+    scene.add(p);
+    state.tireSmokeParticles.push(p);
+  }
+}
+
+// ── Tire Smoke Update ───────────────────────────────────────────────────
+export function updateTireSmoke(dt) {
+  for (let i = state.tireSmokeParticles.length - 1; i >= 0; i--) {
+    const p = state.tireSmokeParticles[i];
+    p.userData.life -= dt;
+    const progress = 1 - p.userData.life / p.userData.maxLife;
+    p.position.y += dt * 2;
+    const s = 1 + progress * 3;
+    p.scale.set(s, s, s);
+    p.material.opacity = 0.5 * (1 - progress);
+    if (p.userData.life <= 0) {
+      scene.remove(p);
+      state.tireSmokeParticles.splice(i, 1);
+    }
   }
 }
 

@@ -14,14 +14,6 @@ canvas#gameCanvas { display: block; }
   pointer-events: none; z-index: 10; font-family: 'Impact', 'Arial Black', sans-serif;
 }
 
-/* Cinematic vignette */
-#hud::before {
-  content: '';
-  position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-  background: radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,0.45) 100%);
-  pointer-events: none; z-index: 0;
-}
-
 #title {
   position: absolute; top: 18px; left: 50%; transform: translateX(-50%);
   font-size: 42px; color: #f5c518; letter-spacing: 4px;
@@ -106,15 +98,38 @@ canvas#gameCanvas { display: block; }
 
 #click-overlay {
   position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-  background: rgba(0,0,0,0.7); z-index: 20;
+  background: rgba(0,0,0,0.85); z-index: 20;
   display: flex; align-items: center; justify-content: center;
-  cursor: pointer;
+  cursor: pointer; flex-direction: column;
 }
-#click-overlay span {
+#click-overlay #play-text {
   color: #f5c518; font-family: 'Impact', sans-serif; font-size: 48px;
   -webkit-text-stroke: 2px #000; text-shadow: 3px 3px 8px rgba(0,0,0,0.8);
   animation: pulse 2s ease-in-out infinite;
 }
+
+/* Loading screen */
+#loading-container { text-align: center; }
+#loading-title {
+  color: #f5c518; font-family: 'Impact', sans-serif; font-size: 72px;
+  -webkit-text-stroke: 2px #000; text-shadow: 3px 3px 10px rgba(0,0,0,0.9);
+  letter-spacing: 8px; margin-bottom: 40px;
+}
+#loading-bar-outer {
+  width: 400px; height: 18px; background: rgba(255,255,255,0.08);
+  border: 2px solid rgba(255,255,255,0.2); border-radius: 9px;
+  overflow: hidden; margin: 0 auto 14px;
+}
+#loading-bar-inner {
+  width: 0%; height: 100%;
+  background: linear-gradient(90deg, #f5c518, #ff8c42);
+  border-radius: 7px; transition: width 0.15s;
+}
+#loading-status {
+  color: rgba(255,255,255,0.5); font-family: Arial, sans-serif; font-size: 13px;
+  letter-spacing: 1px;
+}
+
 @keyframes pulse {
   0%, 100% { transform: scale(1); opacity: 0.9; }
   50% { transform: scale(1.05); opacity: 1; }
@@ -132,7 +147,16 @@ canvas#gameCanvas { display: block; }
 </head>
 <body>
 
-<div id="click-overlay"><span>Click to Play</span></div>
+<div id="click-overlay">
+  <div id="loading-container">
+    <div id="loading-title">GTA VI</div>
+    <div id="loading-bar-outer">
+      <div id="loading-bar-inner"></div>
+    </div>
+    <div id="loading-status">Initializing...</div>
+  </div>
+  <span id="play-text" style="display:none">Click to Play</span>
+</div>
 
 <div id="hud">
   <div id="title">GTA VI</div>

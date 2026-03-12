@@ -51,4 +51,24 @@ export const state = {
   cameraShake: { intensity: 0, timer: 0 },
   // Post-processing ref
   bloomPass: null,
+  // Environment map
+  envCubeTexture: null,
+  envCanvases: null,
+  // Sky dome
+  skyDome: null,
+  skyDomeMaterial: null,
+  starField: null,
+  starMaterial: null,
+  sunMesh: null,
+  moonMesh: null,
+  // Cinematic post-processing
+  cinematicPass: null,
+  // Ocean shader
+  oceanMaterial: null,
+  // Rain
+  rainPoints: null,
+  rainActive: false,
+  rainToggleTimer: 0,
+  // Tire smoke
+  tireSmokeParticles: [],
 };

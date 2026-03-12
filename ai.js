@@ -214,6 +214,9 @@ export function updatePoliceOfficers(dt) {
   const playerZ = state.isInVehicle ? state.currentVehicle.z : state.player.z;
 
   for (const cop of state.policeOfficers) {
+    if (cop.ragdoll && cop.ragdoll.active) continue;
+    if (cop.dead) continue;
+
     const dx = playerX - cop.x, dz = playerZ - cop.z;
     const dist = Math.sqrt(dx * dx + dz * dz);
 

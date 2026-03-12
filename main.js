@@ -1,40 +1,63 @@
 import * as THREE from 'three';
-import { initRenderer, scene, composer } from './renderer.js';
+import { initRenderer, renderer, scene, camera, composer } from './renderer.js';
 import { state } from './state.js';
-import { setupLighting, createCity, createRamps, createOceanAndBeach, createPalmTrees, createClouds, createMoneyPickups, createGunStore } from './city.js';
+import { setupLighting, createCity, createRamps, createOceanAndBeach, createPalmTrees, createClouds, createSkyDome, createMoneyPickups, createGunStore } from './city.js';
 import { createPlayer, createNPCs } from './characters.js';
 import { spawnVehicles, createTrafficCars } from './vehicles.js';
 import { updateRagdoll, checkVehiclePlayerCollision, triggerRagdoll } from './physics.js';
 import { updateNPCs, updateTrafficCars, updatePolice, updatePoliceOfficers } from './ai.js';
-import { updatePlayer, updateVehicle, handleVehicleToggle, handlePunch, handleShoot, updateBullets, updateMoneyPickups, updateWanted, updateDeath, commitCrime } from './player.js';
+import { updatePlayer, updateVehicle, updateTireSmoke, handleVehicleToggle, handlePunch, handleShoot, updateBullets, updateMoneyPickups, updateWanted, updateDeath, commitCrime } from './player.js';
+import { createRain, updateRain } from './weather.js';
 import { updateCamera } from './camera.js';
 import { initHUD, updateHUD, updateMinimap } from './hud.js';
 import { updateDayNight, updateClouds } from './daynight.js';
 import { checkPlayerCarNpcCollision, checkCarCarCollisions } from './collision.js';
 import { updateNpcRagdolls } from './npc-ragdoll.js';
-import { updateExplosions, setTriggerRagdoll } from './vehicle-damage.js';
+import { updateExplosions, setTriggerRagdoll, initExplosionPool } from './vehicle-damage.js';
 
 let clock;
 
-function init() {
+function yieldFrame() {
+  return new Promise(resolve => requestAnimationFrame(resolve));
+}
+
+async function init() {
   clock = new THREE.Clock();
 
-  initRenderer();
+  const bar = document.getElementById('loading-bar-inner');
+  const status = document.getElementById('loading-status');
 
-  setupLighting();
-  createCity();
-  createRamps();
-  createOceanAndBeach();
-  createPalmTrees();
-  createClouds();
-  createPlayer();
-  spawnVehicles();
-  createNPCs();
-  createTrafficCars();
-  createMoneyPickups();
-  createGunStore();
+  const steps = [
+    { fn: initRenderer, label: 'Initializing renderer...' },
+    { fn: setupLighting, label: 'Setting up lighting...' },
+    { fn: createCity, label: 'Building city...' },
+    { fn: createRamps, label: 'Placing ramps...' },
+    { fn: createOceanAndBeach, label: 'Creating ocean...' },
+    { fn: createPalmTrees, label: 'Planting trees...' },
+    { fn: createClouds, label: 'Generating clouds...' },
+    { fn: createSkyDome, label: 'Building sky...' },
+    { fn: createRain, label: 'Setting up weather...' },
+    { fn: initExplosionPool, label: 'Loading effects...' },
+    { fn: createPlayer, label: 'Creating player...' },
+    { fn: spawnVehicles, label: 'Spawning vehicles...' },
+    { fn: createNPCs, label: 'Populating city...' },
+    { fn: createTrafficCars, label: 'Adding traffic...' },
+    { fn: createMoneyPickups, label: 'Placing pickups...' },
+    { fn: createGunStore, label: 'Opening stores...' },
+    { fn: initHUD, label: 'Setting up HUD...' },
+    { fn: () => renderer.compile(scene, camera), label: 'Compiling shaders...' },
+  ];
 
-  initHUD();
+  for (let i = 0; i < steps.length; i++) {
+    status.textContent = steps[i].label;
+    bar.style.width = Math.round((i / steps.length) * 100) + '%';
+    await yieldFrame();
+    steps[i].fn();
+  }
+
+  bar.style.width = '100%';
+  status.textContent = 'Ready!';
+  await yieldFrame();
 
   // Wire up triggerRagdoll for vehicle-damage.js (avoids circular import)
   setTriggerRagdoll(triggerRagdoll);
@@ -70,18 +93,21 @@ function init() {
     }
   });
 
+  document.addEventListener('keydown', e => {
+    if (e.code === 'KeyE' && !state.isDead) handleVehicleToggle();
+  });
+
+  // Switch from loading screen to "Click to Play"
+  document.getElementById('loading-container').style.display = 'none';
+  document.getElementById('play-text').style.display = '';
+
   // Pointer lock
   const overlay = document.getElementById('click-overlay');
   overlay.addEventListener('click', () => {
-    // renderer.domElement is the canvas prepended to body
     document.querySelector('#gameCanvas').requestPointerLock();
   });
   document.addEventListener('pointerlockchange', () => {
     overlay.style.display = document.pointerLockElement ? 'none' : 'flex';
-  });
-
-  document.addEventListener('keydown', e => {
-    if (e.code === 'KeyE' && !state.isDead) handleVehicleToggle();
   });
 
   // Fade controls hint
@@ -138,9 +164,13 @@ function gameLoop() {
 
   updateHUD();
 
-  if (state.ocean) {
-    state.ocean.position.y = -0.3 + Math.sin(state.elapsedTime * 0.8) * 0.15;
+  // Update ocean shader time uniform
+  if (state.oceanMaterial) {
+    state.oceanMaterial.uniforms.time.value = state.elapsedTime;
   }
+
+  updateRain(dt);
+  updateTireSmoke(dt);
 
   state.frameCount++;
   if (state.frameCount % 3 === 0) updateMinimap();

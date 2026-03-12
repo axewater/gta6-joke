@@ -823,14 +823,87 @@ export function createOceanAndBeach() {
   sand.receiveShadow = true;
   scene.add(sand);
 
-  const oceanMat = new THREE.MeshStandardMaterial({
-    color: 0x006994, roughness: 0.2, metalness: 0.3, transparent: true, opacity: 0.8
+  // Shader water with animated waves and fresnel reflections
+  const oceanGeo = new THREE.PlaneGeometry(CITY_SIZE + 400, 300, 128, 64);
+  const oceanMat = new THREE.ShaderMaterial({
+    uniforms: {
+      time: { value: 0 },
+      waterColor: { value: new THREE.Color(0x006994) },
+      skyColor: { value: new THREE.Color(0x87ceeb) },
+      sunDirection: { value: new THREE.Vector3(0.5, 0.5, 0.3).normalize() }
+    },
+    vertexShader: `
+      uniform float time;
+      varying vec2 vUv;
+      varying vec3 vWorldPos;
+      varying float vWaveHeight;
+
+      void main() {
+        vUv = uv;
+        vec3 pos = position;
+
+        float h = 0.0;
+        h += sin(pos.x * 0.05 + time * 1.5) * 1.5;
+        h += sin(pos.y * 0.08 + time * 2.0 + 1.0) * 0.8;
+        h += sin((pos.x + pos.y) * 0.03 + time) * 2.0;
+        h += sin(pos.x * 0.12 - time * 0.8) * 0.5;
+
+        pos.z = h;
+        vWaveHeight = h;
+
+        vec4 worldPos = modelMatrix * vec4(pos, 1.0);
+        vWorldPos = worldPos.xyz;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
+      }
+    `,
+    fragmentShader: `
+      uniform vec3 waterColor;
+      uniform vec3 skyColor;
+      uniform vec3 sunDirection;
+      uniform float time;
+      varying vec2 vUv;
+      varying vec3 vWorldPos;
+      varying float vWaveHeight;
+
+      void main() {
+        vec3 viewDir = normalize(cameraPosition - vWorldPos);
+
+        // Approximate normal from wave derivatives
+        float wx = vWorldPos.x;
+        float wz = vWorldPos.z;
+        float dx = cos(wx * 0.05 + time * 1.5) * 0.075
+                 + cos((wx - wz) * 0.03 + time) * 0.06;
+        float dz = cos(-wz * 0.08 + time * 2.0 + 1.0) * 0.064
+                 + cos((wx - wz) * 0.03 + time) * 0.06;
+        vec3 normal = normalize(vec3(-dx, 1.0, -dz));
+
+        // Fresnel reflection
+        float fresnel = pow(1.0 - max(dot(viewDir, normal), 0.0), 3.0);
+        vec3 color = mix(waterColor, skyColor * 0.7, fresnel * 0.6);
+
+        // Sun specular highlight
+        vec3 reflDir = reflect(-viewDir, normal);
+        float spec = pow(max(dot(reflDir, normalize(sunDirection)), 0.0), 64.0);
+        color += vec3(1.0, 0.9, 0.7) * spec * 2.0;
+
+        // Foam at wave crests
+        float foam = smoothstep(2.5, 4.0, vWaveHeight);
+        color = mix(color, vec3(0.9, 0.95, 1.0), foam * 0.4);
+
+        gl_FragColor = vec4(color, 0.85);
+      }
+    `,
+    transparent: true,
+    side: THREE.DoubleSide,
+    depthWrite: false
   });
-  const ocean = new THREE.Mesh(new THREE.PlaneGeometry(CITY_SIZE + 400, 300), oceanMat);
+
+  const ocean = new THREE.Mesh(oceanGeo, oceanMat);
   ocean.rotation.x = -Math.PI / 2;
   ocean.position.set(0, -0.3, HALF_CITY + 210);
   scene.add(ocean);
   state.ocean = ocean;
+  state.oceanMaterial = oceanMat;
 }
 
 export function createPalmTrees() {
@@ -865,23 +938,110 @@ export function createPalmTrees() {
 }
 
 export function createClouds() {
-  const cloudMat = new THREE.MeshBasicMaterial({
-    color: 0xFFEEDD, transparent: true, opacity: 0.3, side: THREE.DoubleSide
-  });
+  for (let i = 0; i < 18; i++) {
+    const group = new THREE.Group();
+    const sphereCount = 5 + Math.floor(Math.random() * 4);
+    const baseMat = new THREE.MeshBasicMaterial({
+      color: 0xFFEEDD, transparent: true, opacity: 0.25, depthWrite: false
+    });
 
-  for (let i = 0; i < 10; i++) {
-    const w = 40 + Math.random() * 60;
-    const h = 15 + Math.random() * 20;
-    const cloud = new THREE.Mesh(new THREE.PlaneGeometry(w, h), cloudMat);
-    cloud.rotation.x = -Math.PI / 2;
-    cloud.position.set(
+    for (let s = 0; s < sphereCount; s++) {
+      const r = 8 + Math.random() * 12;
+      const geo = new THREE.SphereGeometry(r, 8, 8);
+      const sphere = new THREE.Mesh(geo, baseMat);
+      sphere.position.set(
+        (Math.random() - 0.5) * 30,
+        (Math.random() - 0.5) * 5,
+        (Math.random() - 0.5) * 15
+      );
+      sphere.scale.set(1, 0.4 + Math.random() * 0.3, 1);
+      group.add(sphere);
+    }
+
+    group.position.set(
       (Math.random() - 0.5) * CITY_SIZE * 1.5,
       120 + Math.random() * 40,
       (Math.random() - 0.5) * CITY_SIZE * 1.5
     );
-    scene.add(cloud);
-    state.clouds.push({ mesh: cloud, speed: 0.5 + Math.random() * 1.5 });
+    scene.add(group);
+    state.clouds.push({ mesh: group, speed: 0.5 + Math.random() * 1.5, material: baseMat });
   }
+}
+
+export function createSkyDome() {
+  // Sky dome — gradient sphere covering the scene
+  const skyGeo = new THREE.SphereGeometry(450, 32, 32);
+  const skyMat = new THREE.ShaderMaterial({
+    uniforms: {
+      horizonColor: { value: new THREE.Color(0xFFA062) },
+      zenithColor: { value: new THREE.Color(0x87ceeb) }
+    },
+    vertexShader: `
+      varying vec3 vWorldPosition;
+      void main() {
+        vec4 worldPos = modelMatrix * vec4(position, 1.0);
+        vWorldPosition = worldPos.xyz;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      uniform vec3 horizonColor;
+      uniform vec3 zenithColor;
+      varying vec3 vWorldPosition;
+      void main() {
+        float h = normalize(vWorldPosition).y;
+        float t = pow(max(0.0, h), 0.7);
+        vec3 color = mix(horizonColor, zenithColor, t);
+        gl_FragColor = vec4(color, 1.0);
+      }
+    `,
+    side: THREE.BackSide,
+    depthWrite: false
+  });
+  const skyDome = new THREE.Mesh(skyGeo, skyMat);
+  scene.add(skyDome);
+  state.skyDome = skyDome;
+  state.skyDomeMaterial = skyMat;
+
+  // Star field — 300 points on upper hemisphere
+  const starCount = 300;
+  const starPositions = new Float32Array(starCount * 3);
+  for (let i = 0; i < starCount; i++) {
+    const theta = Math.random() * Math.PI * 2;
+    const phi = Math.random() * Math.PI * 0.5;
+    const r = 440;
+    starPositions[i * 3] = r * Math.sin(phi) * Math.cos(theta);
+    starPositions[i * 3 + 1] = r * Math.cos(phi);
+    starPositions[i * 3 + 2] = r * Math.sin(phi) * Math.sin(theta);
+  }
+  const starGeo = new THREE.BufferGeometry();
+  starGeo.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
+  const starMat = new THREE.PointsMaterial({
+    color: 0xffffff, size: 1.5, transparent: true, opacity: 0,
+    sizeAttenuation: false, depthWrite: false, fog: false
+  });
+  const starField = new THREE.Points(starGeo, starMat);
+  scene.add(starField);
+  state.starField = starField;
+  state.starMaterial = starMat;
+
+  // Sun mesh
+  const sunGeo = new THREE.SphereGeometry(8, 16, 16);
+  const sunMat = new THREE.MeshBasicMaterial({
+    color: 0xFFDD44, transparent: true, depthWrite: false, fog: false
+  });
+  const sunMesh = new THREE.Mesh(sunGeo, sunMat);
+  scene.add(sunMesh);
+  state.sunMesh = sunMesh;
+
+  // Moon mesh
+  const moonGeo = new THREE.SphereGeometry(6, 16, 16);
+  const moonMat = new THREE.MeshBasicMaterial({
+    color: 0xDDDDFF, transparent: true, depthWrite: false, fog: false
+  });
+  const moonMesh = new THREE.Mesh(moonGeo, moonMat);
+  scene.add(moonMesh);
+  state.moonMesh = moonMesh;
 }
 
 export function createMoneyPickups() {
