@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { scene } from './renderer.js';
 import { state } from './state.js';
 import { BLOCK, NEON_COLORS, GRID, CELL, HALF_CITY, ROAD, CITY_SIZE } from './constants.js';
+import { registerStaticMesh } from './geometry-merger.js';
 
 export function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
 
@@ -60,11 +61,21 @@ export function clampToBlock(bx, bz, bw, bd, blockCenterX, blockCenterZ) {
   return { minX, maxX, minZ, maxZ };
 }
 
+// Material pool for non-windowed buildings — keyed by color hex
+const buildingMatPool = new Map();
+function getPooledBuildingMat(color) {
+  const key = typeof color === 'number' ? color : color;
+  if (!buildingMatPool.has(key)) {
+    buildingMatPool.set(key, new THREE.MeshStandardMaterial({ color, roughness: 0.85 }));
+  }
+  return buildingMatPool.get(key);
+}
+
 export function addBuilding(cx, cz, w, h, d, color, useWindows, castSh) {
   const mat = useWindows
     ? new THREE.MeshStandardMaterial({ color, map: makeWindowTexture(w, h), roughness: 0.8 })
-    : new THREE.MeshStandardMaterial({ color, roughness: 0.85 });
-  const roofMat = new THREE.MeshStandardMaterial({ color, roughness: 0.9 });
+    : getPooledBuildingMat(color);
+  const roofMat = useWindows ? new THREE.MeshStandardMaterial({ color, roughness: 0.9 }) : null;
   const geo = new THREE.BoxGeometry(w, h, d);
   const mats = useWindows ? [mat, mat, roofMat, roofMat, mat, mat] : mat;
   const mesh = new THREE.Mesh(geo, mats);
@@ -73,6 +84,12 @@ export function addBuilding(cx, cz, w, h, d, color, useWindows, castSh) {
   mesh.receiveShadow = true;
   scene.add(mesh);
   state.buildingMeshes.push(mesh);
+
+  // Auto-register non-windowed buildings for geometry merging
+  if (!useWindows) {
+    registerStaticMesh(mesh, mat);
+  }
+
   return mesh;
 }
 

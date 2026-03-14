@@ -6,6 +6,7 @@ export function collideAABB(x, z, halfW, halfD, skipRamps = false) {
   let cx = x, cz = z;
   for (const b of state.buildings) {
     if (skipRamps && b.isRamp) continue;
+    if (b.destroyed) continue;
     const overlapX = Math.min(cx + halfW, b.maxX) - Math.max(cx - halfW, b.minX);
     const overlapZ = Math.min(cz + halfD, b.maxZ) - Math.max(cz - halfD, b.minZ);
     if (overlapX > 0 && overlapZ > 0) {

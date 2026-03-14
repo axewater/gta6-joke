@@ -7,6 +7,9 @@ import { createPoliceOfficer } from './characters.js';
 import { createPoliceCar, createTank } from './vehicles.js';
 import { randomSidewalkPos } from './city.js';
 import { launchNpcRagdoll } from './npc-ragdoll.js';
+import { policeBulletPool, gangBulletPool, tankShellPool } from './object-pool.js';
+
+let nextTankId = 0;
 
 // ── NPC AI ────────────────────────────────────────────────────────────
 export function updateNPCs(dt) {
@@ -303,12 +306,23 @@ export function updateTanks(dt) {
     const dist = 100 + Math.random() * 50;
     const px = state.isInVehicle ? state.currentVehicle.x : state.player.x;
     const pz = state.isInVehicle ? state.currentVehicle.z : state.player.z;
-    state.tanks.push(createTank(px + Math.cos(angle) * dist, pz + Math.sin(angle) * dist));
+    const tank = createTank(px + Math.cos(angle) * dist, pz + Math.sin(angle) * dist);
+    tank.tankId = nextTankId++;
+    state.tanks.push(tank);
   }
   while (state.tanks.length > targetCount) {
-    const tank = state.tanks.pop();
-    for (const s of tank.shells) scene.remove(s.mesh);
-    scene.remove(tank.mesh);
+    const removed = state.tanks.pop();
+    // Clean up shells belonging to this tank from the flat array
+    const removedId = removed.tankId;
+    const shells = state.tankShells;
+    for (let i = shells.length - 1; i >= 0; i--) {
+      if (shells[i].tankId === removedId) {
+        tankShellPool.release(shells[i].mesh);
+        shells[i] = shells[shells.length - 1];
+        shells.pop();
+      }
+    }
+    scene.remove(removed.mesh);
   }
 
   const playerX = state.isInVehicle ? state.currentVehicle.x : state.player.x;
@@ -333,48 +347,21 @@ export function updateTanks(dt) {
     tank.mesh.position.set(tank.x, 0, tank.z);
     tank.mesh.rotation.y = tank.rotation;
 
-    // Fire cannon shell
+    // Fire cannon shell into flat state.tankShells array
     tank.shootTimer -= dt;
     if (tank.shootTimer <= 0 && dist < 150) {
       tank.shootTimer = 4 + Math.random() * 2;
-      const shellGeo = new THREE.SphereGeometry(0.3, 6, 6);
-      const shellMat = new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.7, metalness: 0.4 });
-      const shellMesh = new THREE.Mesh(shellGeo, shellMat);
+      const shellMesh = tankShellPool.acquire();
+      if (!shellMesh) continue;
       shellMesh.position.set(tank.x, 1.8, tank.z);
-      scene.add(shellMesh);
       const dxN = dx / dist, dzN = dz / dist;
-      tank.shells.push({
+      state.tankShells.push({
         mesh: shellMesh,
         x: tank.x, y: 1.8, z: tank.z,
         dx: dxN * 40, dy: 0.5, dz: dzN * 40,
-        life: 5.0
+        life: 5.0,
+        tankId: tank.tankId
       });
-    }
-
-    // Update shells
-    for (let i = tank.shells.length - 1; i >= 0; i--) {
-      const s = tank.shells[i];
-      s.x += s.dx * dt;
-      s.y += s.dy * dt;
-      s.z += s.dz * dt;
-      s.dy -= 15 * dt;
-      s.life -= dt;
-      s.mesh.position.set(s.x, s.y, s.z);
-
-      const px2 = state.isInVehicle ? state.currentVehicle.x : state.player.x;
-      const pz2 = state.isInVehicle ? state.currentVehicle.z : state.player.z;
-      const ddx = px2 - s.x, ddz = pz2 - s.z;
-      const hitPlayer = (ddx * ddx + ddz * ddz < 64); // radius 8 AOE
-
-      if (s.life <= 0 || s.y <= 0 || hitPlayer) {
-        if (hitPlayer && !state.isDead) {
-          state.health -= 60;
-          state.cameraShake.intensity = 1.5;
-          state.cameraShake.timer = 0.8;
-        }
-        scene.remove(s.mesh);
-        tank.shells.splice(i, 1);
-      }
     }
   }
 }
@@ -437,11 +424,9 @@ export function updatePoliceOfficers(dt) {
     if (cop.shootTimer <= 0 && dist < 40 && dist > 5) {
       cop.shootTimer = 0.8 + Math.random() * 0.5;
 
-      const bulletGeo = new THREE.SphereGeometry(0.08, 4, 4);
-      const bulletMat = new THREE.MeshBasicMaterial({ color: 0xFF6600 });
-      const bullet = new THREE.Mesh(bulletGeo, bulletMat);
+      const bullet = policeBulletPool.acquire();
+      if (!bullet) continue;
       bullet.position.set(cop.x, 1.3, cop.z);
-      scene.add(bullet);
 
       const bDir = { x: dx / dist + (Math.random() - 0.5) * 0.15, z: dz / dist + (Math.random() - 0.5) * 0.15 };
       state.policeBullets.push({
@@ -483,9 +468,7 @@ function getGangZoneBounds(gangIndex) {
   };
 }
 
-// Shared bullet geometry/material for gang bullets
-const gangBulletGeo = new THREE.SphereGeometry(0.08, 4, 4);
-const gangBulletMat = new THREE.MeshBasicMaterial({ color: 0xFF4400 });
+// Gang bullets now use object pool (gangBulletPool from object-pool.js)
 
 // ── Gang NPC AI ──────────────────────────────────────────────────────
 export function updateGangNPCs(dt) {
@@ -535,9 +518,9 @@ export function updateGangNPCs(dt) {
       gnpc.shootTimer -= dt;
       if (gnpc.shootTimer <= 0 && distToPlayer < gang.shootRange && distToPlayer > 4 && state.gangBullets.length < 15) {
         gnpc.shootTimer = GANG_SHOOT_COOLDOWN + Math.random() * 0.5;
-        const bullet = new THREE.Mesh(gangBulletGeo, gangBulletMat);
+        const bullet = gangBulletPool.acquire();
+        if (!bullet) continue;
         bullet.position.set(gnpc.x, 1.3, gnpc.z);
-        scene.add(bullet);
         const bDir = { x: dx / distToPlayer + (Math.random() - 0.5) * 0.2, z: dz / distToPlayer + (Math.random() - 0.5) * 0.2 };
         state.gangBullets.push({
           mesh: bullet, x: gnpc.x, y: 1.3, z: gnpc.z,
@@ -583,9 +566,9 @@ export function updateGangNPCs(dt) {
         if (closestNpc) {
           const ndx = closestNpc.x - gnpc.x, ndz = closestNpc.z - gnpc.z;
           const nd = Math.sqrt(ndx * ndx + ndz * ndz);
-          const bullet = new THREE.Mesh(gangBulletGeo, gangBulletMat);
+          const bullet = gangBulletPool.acquire();
+          if (!bullet) break;
           bullet.position.set(gnpc.x, 1.3, gnpc.z);
-          scene.add(bullet);
           state.gangBullets.push({
             mesh: bullet, x: gnpc.x, y: 1.3, z: gnpc.z,
             dx: (ndx / nd) * 50, dy: 0, dz: (ndz / nd) * 50,
@@ -607,52 +590,4 @@ export function updateGangNPCs(dt) {
   }
 }
 
-// ── Gang Bullets ─────────────────────────────────────────────────────
-export function updateGangBullets(dt) {
-  for (let i = state.gangBullets.length - 1; i >= 0; i--) {
-    const b = state.gangBullets[i];
-    b.x += b.dx * dt; b.y += b.dy * dt; b.z += b.dz * dt;
-    b.life -= dt;
-    b.mesh.position.set(b.x, b.y, b.z);
-
-    if (b.life <= 0) { scene.remove(b.mesh); state.gangBullets.splice(i, 1); continue; }
-
-    // Hit player
-    const px = state.player.x, pz = state.player.z;
-    const pdx = px - b.x, pdz = pz - b.z;
-    if (pdx * pdx + pdz * pdz < 2 && !state.isInVehicle && !state.isDead) {
-      state.health -= 15;
-      scene.remove(b.mesh); state.gangBullets.splice(i, 1);
-      continue;
-    }
-
-    // Hit civilian NPCs
-    let hitCiv = false;
-    for (const npc of state.npcs) {
-      if (!npc.alive) continue;
-      const ndx = npc.x - b.x, ndz = npc.z - b.z;
-      if (ndx * ndx + ndz * ndz < 2) {
-        launchNpcRagdoll(npc, 8, Math.atan2(b.dx, b.dz));
-        scene.remove(b.mesh); state.gangBullets.splice(i, 1);
-        hitCiv = true;
-        break;
-      }
-    }
-    if (hitCiv) continue;
-
-    // Hit rival gang members
-    for (const gnpc of state.gangNpcs) {
-      if (gnpc.dead || gnpc.gangIndex === b.gangIndex) continue;
-      if (gnpc.ragdoll && gnpc.ragdoll.active) continue;
-      const gdx = gnpc.x - b.x, gdz = gnpc.z - b.z;
-      if (gdx * gdx + gdz * gdz < 2) {
-        gnpc.dead = true;
-        gnpc.mesh.rotation.x = Math.PI / 2;
-        gnpc.respawnTimer = 15;
-        setTimeout(() => { gnpc.mesh.visible = false; }, 1000);
-        scene.remove(b.mesh); state.gangBullets.splice(i, 1);
-        break;
-      }
-    }
-  }
-}
+// updateGangBullets moved to systems.js as gangBulletSystem

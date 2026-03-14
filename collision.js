@@ -69,6 +69,49 @@ export function checkPlayerCarNpcCollision() {
   }
 }
 
+// ── Street Light Destruction ───────────────────────────────────────────
+export function checkStreetLightCollision() {
+  if (!state.isInVehicle) return;
+  const v = state.currentVehicle;
+  if (!v || v.isExploded) return;
+  const speed = Math.abs(v.speed);
+  if (speed < 3) return;
+
+  for (const sl of state.streetLights) {
+    if (sl.destroyed) continue;
+    const dx = sl.x - v.x;
+    const dz = sl.z - v.z;
+    const dist = Math.sqrt(dx * dx + dz * dz);
+    if (dist < v.halfW + 0.5) {
+      sl.destroyed = true;
+      sl.aabb.destroyed = true;
+      // Fall in the direction the car is moving
+      sl.fallDirX = Math.sin(v.rotation);
+      sl.fallDirZ = Math.cos(v.rotation);
+      sl.fallTimer = 0;
+      v.speed *= 0.85;
+      state.cameraShake.intensity = 0.4;
+      state.cameraShake.timer = 0.2;
+    }
+  }
+}
+
+export function updateFallingLights(dt) {
+  for (const sl of state.streetLights) {
+    if (!sl.destroyed || sl.fallTimer > 2) continue;
+    sl.fallTimer += dt;
+    const t = Math.min(sl.fallTimer / 0.8, 1); // 0.8s to fall
+    const angle = t * Math.PI / 2;
+    // Rotate around base toward fall direction
+    sl.group.rotation.x = sl.fallDirZ * angle;
+    sl.group.rotation.z = -sl.fallDirX * angle;
+    // Fade out light
+    if (sl.pointLight.intensity > 0.01) {
+      sl.pointLight.intensity *= 0.92;
+    }
+  }
+}
+
 // ── Car vs Car Collision ────────────────────────────────────────────────
 export function checkCarCarCollisions() {
   if (!state.isInVehicle) return;

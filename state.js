@@ -5,7 +5,7 @@ export const state = {
   buildings: [],
   keys: {},
   mouse: { dx: 0, dy: 0 },
-  camera: { theta: 0, phi: 0.5, distance: 10 },
+  camera: { theta: 0, phi: 0.5, distance: 6 },
   isInVehicle: false,
   currentVehicle: null,
   health: 100,
@@ -79,6 +79,8 @@ export const state = {
   // Heavy forces
   helicopter: null,
   tanks: [],
+  tankShells: [],
+  heliMissiles: [],
   // Road material refs for rain toggle
   roadMaterial: null,
   puddleMaterial: null,
@@ -87,4 +89,8 @@ export const state = {
   // Gang system
   gangNpcs: [],
   gangBullets: [],
+  // Performance optimization
+  bulbMat: null,
+  spatialGrid: null,
+  mergedMeshes: [],
 };

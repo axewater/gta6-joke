@@ -129,12 +129,12 @@ export function createPlayer() {
   root.add(headGroup);
 
   root.scale.set(0.5, 0.625, 0.5);
-  root.position.set(0, 0, 0);
+  root.position.set(86, 0, 86);
   scene.add(root);
 
   state.player = {
     mesh: root,
-    x: 0, y: 0, z: 0,
+    x: 86, y: 0, z: 86,
     leftLeg: body.leftLeg,
     rightLeg: body.rightLeg,
     leftArm: body.leftArm,

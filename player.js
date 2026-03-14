@@ -10,6 +10,7 @@ import { collideAABB } from './physics.js';
 import { randomSidewalkPos } from './city.js';
 import { spawnTrafficCar } from './vehicles.js';
 import { applyVehicleDamage } from './vehicle-damage.js';
+import { playerBulletPool, policeBulletPool, gangBulletPool, tireSmokePool, tankShellPool, missilePool } from './object-pool.js';
 
 // ── Crime System ────────────────────────────────────────────────────────
 export function commitCrime() {
@@ -262,32 +263,18 @@ export function updateVehicle(dt) {
     const cosR = Math.cos(v.rotation);
     const rearX = v.x - sinR * 2;
     const rearZ = v.z - cosR * 2;
-    const geo = new THREE.SphereGeometry(0.2, 4, 4);
-    const mat = new THREE.MeshBasicMaterial({ color: 0xCCCCCC, transparent: true, opacity: 0.5 });
-    const p = new THREE.Mesh(geo, mat);
-    p.position.set(rearX + (Math.random() - 0.5) * 1.5, 0.3, rearZ + (Math.random() - 0.5) * 1.5);
-    p.userData = { life: 0.8, maxLife: 0.8 };
-    scene.add(p);
-    state.tireSmokeParticles.push(p);
-  }
-}
-
-// ── Tire Smoke Update ───────────────────────────────────────────────────
-export function updateTireSmoke(dt) {
-  for (let i = state.tireSmokeParticles.length - 1; i >= 0; i--) {
-    const p = state.tireSmokeParticles[i];
-    p.userData.life -= dt;
-    const progress = 1 - p.userData.life / p.userData.maxLife;
-    p.position.y += dt * 2;
-    const s = 1 + progress * 3;
-    p.scale.set(s, s, s);
-    p.material.opacity = 0.5 * (1 - progress);
-    if (p.userData.life <= 0) {
-      scene.remove(p);
-      state.tireSmokeParticles.splice(i, 1);
+    const p = tireSmokePool.acquire();
+    if (p) {
+      p.position.set(rearX + (Math.random() - 0.5) * 1.5, 0.3, rearZ + (Math.random() - 0.5) * 1.5);
+      p.scale.set(1, 1, 1);
+      p.material.opacity = 0.5;
+      p.userData = { life: 0.8, maxLife: 0.8 };
+      state.tireSmokeParticles.push(p);
     }
   }
 }
+
+// updateTireSmoke moved to tireSmokeSystem in systems.js
 
 // ── Vehicle Enter/Exit ──────────────────────────────────────────────────
 export function handleVehicleToggle() {
@@ -302,7 +289,7 @@ export function handleVehicleToggle() {
     state.player.mesh.position.set(state.player.x, 0, state.player.z);
     state.isInVehicle = false;
     state.currentVehicle = null;
-    state.camera.distance = 10;
+    state.camera.distance = 6;
   } else {
     let nearest = null, nearestDist = 5.5, isCarjack = false;
 
@@ -335,7 +322,7 @@ export function handleVehicleToggle() {
       state.isInVehicle = true;
       state.currentVehicle = nearest;
       state.player.mesh.visible = false;
-      state.camera.distance = 14;
+      state.camera.distance = 9;
       showRadioPopup();
     }
   }
@@ -406,11 +393,10 @@ export function handleShoot() {
   const dir = new THREE.Vector3(0, 0, -1);
   dir.applyAxisAngle(new THREE.Vector3(0, 1, 0), state.camera.theta);
 
-  const bulletGeo = new THREE.SphereGeometry(0.1, 4, 4);
-  const bulletMat = new THREE.MeshBasicMaterial({ color: 0xFFFF00 });
-  const bullet = new THREE.Mesh(bulletGeo, bulletMat);
+  const bullet = playerBulletPool.acquire();
+  if (!bullet) return;
   bullet.position.set(p.x, p.y + 1.5, p.z);
-  scene.add(bullet);
+  bullet.scale.set(1, 1, 1);
 
   state.playerBullets.push({
     mesh: bullet,
@@ -421,75 +407,7 @@ export function handleShoot() {
   commitCrime();
 }
 
-// ── Bullets Update ──────────────────────────────────────────────────────
-export function updateBullets(dt) {
-  // Player bullets
-  for (let i = state.playerBullets.length - 1; i >= 0; i--) {
-    const b = state.playerBullets[i];
-    b.x += b.dx * dt; b.y += b.dy * dt; b.z += b.dz * dt;
-    b.life -= dt;
-    b.mesh.position.set(b.x, b.y, b.z);
-
-    if (b.life <= 0) { scene.remove(b.mesh); state.playerBullets.splice(i, 1); continue; }
-
-    for (const npc of state.npcs) {
-      if (!npc.alive) continue;
-      const dx = npc.x - b.x, dz = npc.z - b.z;
-      if (dx * dx + dz * dz < 2) {
-        npc.alive = false;
-        npc.mesh.rotation.x = Math.PI / 2;
-        npc.respawnTimer = 15;
-        npc.aggressive = false;
-        setTimeout(() => { npc.mesh.visible = false; }, 1000);
-        scene.remove(b.mesh); state.playerBullets.splice(i, 1);
-        registerCivilianKill(); break;
-      }
-    }
-
-    for (let j = state.policeOfficers.length - 1; j >= 0; j--) {
-      const cop = state.policeOfficers[j];
-      const dx = cop.x - b.x, dz = cop.z - b.z;
-      if (dx * dx + dz * dz < 2) {
-        scene.remove(cop.mesh); state.policeOfficers.splice(j, 1);
-        scene.remove(b.mesh); state.playerBullets.splice(i, 1);
-        registerPoliceKill(); break;
-      }
-    }
-
-    // Hit gang NPCs
-    if (state.playerBullets[i]) { // still alive after police check
-      for (const gnpc of state.gangNpcs) {
-        if (gnpc.dead) continue;
-        if (gnpc.ragdoll && gnpc.ragdoll.active) continue;
-        const dx = gnpc.x - b.x, dz = gnpc.z - b.z;
-        if (dx * dx + dz * dz < 2) {
-          gnpc.dead = true;
-          gnpc.mesh.rotation.x = Math.PI / 2;
-          gnpc.respawnTimer = 15;
-          setTimeout(() => { gnpc.mesh.visible = false; }, 1000);
-          scene.remove(b.mesh); state.playerBullets.splice(i, 1);
-          registerCivilianKill(); break;
-        }
-      }
-    }
-  }
-
-  // Police bullets
-  for (let i = state.policeBullets.length - 1; i >= 0; i--) {
-    const b = state.policeBullets[i];
-    b.x += b.dx * dt; b.y += b.dy * dt; b.z += b.dz * dt;
-    b.life -= dt;
-    b.mesh.position.set(b.x, b.y, b.z);
-
-    if (b.life <= 0) { scene.remove(b.mesh); state.policeBullets.splice(i, 1); continue; }
-
-    const dx = state.player.x - b.x, dz = state.player.z - b.z;
-    if (dx * dx + dz * dz < 2 && !state.isInVehicle) {
-      state.health -= 15;
-      scene.remove(b.mesh); state.policeBullets.splice(i, 1);
-    }
-  }
-}
+// updateBullets moved to playerBulletSystem + policeBulletSystem in systems.js
 
 // ── Money Pickups Update ────────────────────────────────────────────────
 export function updateMoneyPickups(dt) {
@@ -549,17 +467,19 @@ export function updateDeath(dt) {
 
       for (const cop of state.policeOfficers) scene.remove(cop.mesh);
       state.policeOfficers = [];
-      for (const b of state.playerBullets) scene.remove(b.mesh);
-      for (const b of state.policeBullets) scene.remove(b.mesh);
-      for (const b of state.gangBullets) scene.remove(b.mesh);
+      for (const b of state.playerBullets) playerBulletPool.release(b.mesh);
+      for (const b of state.policeBullets) policeBulletPool.release(b.mesh);
+      for (const b of state.gangBullets) gangBulletPool.release(b.mesh);
       state.playerBullets = []; state.policeBullets = []; state.gangBullets = [];
       if (state.helicopter) {
         scene.remove(state.helicopter.mesh);
-        for (const m of state.helicopter.missiles) scene.remove(m.mesh);
         state.helicopter = null;
       }
+      for (const m of state.heliMissiles) missilePool.release(m.mesh);
+      state.heliMissiles = [];
+      for (const s of state.tankShells) tankShellPool.release(s.mesh);
+      state.tankShells = [];
       for (const tank of state.tanks) {
-        for (const s of tank.shells) scene.remove(s.mesh);
         scene.remove(tank.mesh);
       }
       state.tanks = [];
@@ -567,11 +487,11 @@ export function updateDeath(dt) {
       state.policeKilled = 0;
 
       if (state.isInVehicle) { state.isInVehicle = false; state.currentVehicle = null; }
-      state.player.x = 0; state.player.y = 0; state.player.z = 0;
+      state.player.x = 86; state.player.y = 0; state.player.z = 86;
       state.player.mesh.rotation.set(0, 0, 0);
       state.player.mesh.visible = true;
-      state.player.mesh.position.set(0, 0, 0);
-      state.camera.distance = 10;
+      state.player.mesh.position.set(86, 0, 86);
+      state.camera.distance = 6;
     }
     return;
   }

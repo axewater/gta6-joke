@@ -764,7 +764,6 @@ export function createTank(x, z) {
     x, z,
     rotation: Math.random() * Math.PI * 2,
     halfW: 3.3, halfD: 4.8,
-    shootTimer: 4 + Math.random() * 2,
-    shells: []
+    shootTimer: 4 + Math.random() * 2
   };
 }

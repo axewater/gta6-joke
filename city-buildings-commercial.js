@@ -4,6 +4,19 @@ import { state } from './state.js';
 import { BLOCK, BUILDING_COLORS, SHOP_SIGN_COLORS } from './constants.js';
 import { S } from './city-constants.js';
 import { pick, clampToBlock, addBuilding, pushAABB } from './city-helpers.js';
+import { registerStaticMesh } from './geometry-merger.js';
+
+// ── Shared module-scope materials & geometry ────────────────────────
+const gasPoleMat = new THREE.MeshStandardMaterial({ color: 0x888888, metalness: 0.5 });
+const gasCanopyMat = new THREE.MeshStandardMaterial({ color: 0xCCCCCC, roughness: 0.5, metalness: 0.3 });
+const pumpMat = new THREE.MeshStandardMaterial({ color: 0xEEEEEE, roughness: 0.6 });
+const barMat = new THREE.MeshStandardMaterial({ color: 0x333333, metalness: 0.7 });
+const restTableMat = new THREE.MeshStandardMaterial({ color: 0xCCCCCC, roughness: 0.6 });
+const restChairMat = new THREE.MeshStandardMaterial({ color: 0xFF4444, roughness: 0.7 });
+const restStripeMat = new THREE.MeshStandardMaterial({ color: 0xFFCC00, roughness: 0.5 });
+const donutTrimMat = new THREE.MeshStandardMaterial({ color: 0xFFFFFF, roughness: 0.5 });
+const donutShopChairMat = new THREE.MeshStandardMaterial({ color: 0xFFB6C1, roughness: 0.7 });
+const legGeo = new THREE.CylinderGeometry(0.08, 0.08, 0.8, 6);
 
 export function createShop(blockCenterX, blockCenterZ) {
   const count = 2 + Math.floor(Math.random() * 2); // 2-3 shops per block
@@ -51,19 +64,19 @@ export function createShop(blockCenterX, blockCenterZ) {
 // ── Gas Station ──────────────────────────────────────────────────────
 export function createGasStation(blockCenterX, blockCenterZ) {
   // Flat canopy on 4 poles
-  const canopyMat = new THREE.MeshStandardMaterial({ color: 0xCCCCCC, roughness: 0.5, metalness: 0.3 });
-  const canopy = new THREE.Mesh(new THREE.BoxGeometry(20 * S, 0.4, 12 * S), canopyMat);
+  const canopy = new THREE.Mesh(new THREE.BoxGeometry(20 * S, 0.4, 12 * S), gasCanopyMat);
   canopy.position.set(blockCenterX, 4 * S, blockCenterZ - 5 * S);
   canopy.castShadow = true;
   scene.add(canopy);
+  registerStaticMesh(canopy, gasCanopyMat);
 
   // 4 poles
-  const poleMat = new THREE.MeshStandardMaterial({ color: 0x888888, metalness: 0.5 });
   const poleGeo = new THREE.CylinderGeometry(0.2, 0.2, 4 * S, 6);
   for (const [px, pz] of [[-8, -10], [8, -10], [-8, 0], [8, 0]]) {
-    const pole = new THREE.Mesh(poleGeo, poleMat);
+    const pole = new THREE.Mesh(poleGeo, gasPoleMat);
     pole.position.set(blockCenterX + px * S, 2 * S, blockCenterZ + pz * S);
     scene.add(pole);
+    registerStaticMesh(pole, gasPoleMat);
   }
 
   // Small shop building
@@ -77,11 +90,11 @@ export function createGasStation(blockCenterX, blockCenterZ) {
   pushAABB(blockCenterX, blockCenterZ + 15 * S, shopW, shopD, shopH);
 
   // Gas pumps
-  const pumpMat = new THREE.MeshStandardMaterial({ color: 0xEEEEEE, roughness: 0.6 });
   for (let p = 0; p < 3; p++) {
     const pump = new THREE.Mesh(new THREE.BoxGeometry(1, 2, 0.8), pumpMat);
     pump.position.set(blockCenterX - 6 * S + p * 6 * S, 1, blockCenterZ - 5 * S);
     scene.add(pump);
+    registerStaticMesh(pump, pumpMat);
     pushAABB(blockCenterX - 6 * S + p * 6 * S, blockCenterZ - 5 * S, 1, 0.8, 2);
   }
 
@@ -106,11 +119,11 @@ export function createLiquorStore(blockCenterX, blockCenterZ) {
   scene.add(sign);
 
   // Window bars
-  const barMat = new THREE.MeshStandardMaterial({ color: 0x333333, metalness: 0.7 });
   for (let b = 0; b < 4; b++) {
     const bar = new THREE.Mesh(new THREE.BoxGeometry(0.1, 3, 0.1), barMat);
     bar.position.set(blockCenterX - 3 + b * 2, 2, blockCenterZ + d / 2 + 0.1);
     scene.add(bar);
+    registerStaticMesh(bar, barMat);
   }
 
   // Neon light
@@ -133,10 +146,10 @@ export function createRestaurant(blockCenterX, blockCenterZ) {
   pushAABB(blockCenterX, blockCenterZ, w, d, h);
 
   // Yellow accent stripe
-  const stripeMat = new THREE.MeshStandardMaterial({ color: 0xFFCC00, roughness: 0.5 });
-  const stripe = new THREE.Mesh(new THREE.BoxGeometry(w + 0.1, 1, d + 0.1), stripeMat);
+  const stripe = new THREE.Mesh(new THREE.BoxGeometry(w + 0.1, 1, d + 0.1), restStripeMat);
   stripe.position.set(blockCenterX, h - 0.5, blockCenterZ);
   scene.add(stripe);
+  registerStaticMesh(stripe, restStripeMat);
 
   // Golden "M" sign on front (3 yellow boxes forming M shape)
   const mMat = new THREE.MeshStandardMaterial({ color: 0xFFD700, emissive: 0xFFD700, emissiveIntensity: 2 });
@@ -160,28 +173,27 @@ export function createRestaurant(blockCenterX, blockCenterZ) {
   scene.add(signBoard);
 
   // Outdoor seating — tables on one side
-  const tableMat = new THREE.MeshStandardMaterial({ color: 0xCCCCCC, roughness: 0.6 });
-  const chairMat = new THREE.MeshStandardMaterial({ color: 0xFF4444, roughness: 0.7 });
-  const legGeo = new THREE.CylinderGeometry(0.08, 0.08, 0.8, 6);
-
   for (let t = 0; t < 5; t++) {
     const tx = blockCenterX - 8 * S + t * 4 * S;
     const tz = blockCenterZ + d / 2 + 4;
 
     // Table top
-    const top = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.1, 1.5), tableMat);
+    const top = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.1, 1.5), restTableMat);
     top.position.set(tx, 0.85, tz);
     scene.add(top);
+    registerStaticMesh(top, restTableMat);
     // Table leg
-    const leg = new THREE.Mesh(legGeo, tableMat);
+    const leg = new THREE.Mesh(legGeo, restTableMat);
     leg.position.set(tx, 0.4, tz);
     scene.add(leg);
+    registerStaticMesh(leg, restTableMat);
 
     // 2 chairs
     for (const cz of [tz - 1.2, tz + 1.2]) {
-      const chair = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.1, 0.6), chairMat);
+      const chair = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.1, 0.6), restChairMat);
       chair.position.set(tx, 0.5, cz);
       scene.add(chair);
+      registerStaticMesh(chair, restChairMat);
 
       // Register seat
       state.restaurantSeats.push({
@@ -203,10 +215,10 @@ export function createDonutShop(blockCenterX, blockCenterZ) {
   pushAABB(blockCenterX, blockCenterZ, w, d, h);
 
   // White trim
-  const trimMat = new THREE.MeshStandardMaterial({ color: 0xFFFFFF, roughness: 0.5 });
-  const trim = new THREE.Mesh(new THREE.BoxGeometry(w + 0.1, 0.5, d + 0.1), trimMat);
+  const trim = new THREE.Mesh(new THREE.BoxGeometry(w + 0.1, 0.5, d + 0.1), donutTrimMat);
   trim.position.set(blockCenterX, h, blockCenterZ);
   scene.add(trim);
+  registerStaticMesh(trim, donutTrimMat);
 
   // Giant donut on roof
   const donutGeo = new THREE.TorusGeometry(3 * S, 1.2 * S, 12, 24);
@@ -236,25 +248,24 @@ export function createDonutShop(blockCenterX, blockCenterZ) {
   state.neonPointLights.push(pl);
 
   // Outdoor tables with seats
-  const tableMat = new THREE.MeshStandardMaterial({ color: 0xCCCCCC, roughness: 0.6 });
-  const chairMat = new THREE.MeshStandardMaterial({ color: 0xFFB6C1, roughness: 0.7 });
-  const legGeo = new THREE.CylinderGeometry(0.08, 0.08, 0.8, 6);
-
   for (let t = 0; t < 3; t++) {
     const tx = blockCenterX - 4 * S + t * 4 * S;
     const tz = blockCenterZ + d / 2 + 4;
 
-    const top = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.1, 1.5), tableMat);
+    const top = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.1, 1.5), restTableMat);
     top.position.set(tx, 0.85, tz);
     scene.add(top);
-    const leg = new THREE.Mesh(legGeo, tableMat);
+    registerStaticMesh(top, restTableMat);
+    const leg = new THREE.Mesh(legGeo, restTableMat);
     leg.position.set(tx, 0.4, tz);
     scene.add(leg);
+    registerStaticMesh(leg, restTableMat);
 
     for (const cz of [tz - 1.2, tz + 1.2]) {
-      const chair = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.1, 0.6), chairMat);
+      const chair = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.1, 0.6), donutShopChairMat);
       chair.position.set(tx, 0.5, cz);
       scene.add(chair);
+      registerStaticMesh(chair, donutShopChairMat);
 
       state.restaurantSeats.push({
         x: tx, z: cz, tableX: tx, tableZ: tz, occupied: false

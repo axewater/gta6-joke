@@ -4,10 +4,13 @@ import { state } from './state.js';
 import { BLOCK, DOWNTOWN_COLORS } from './constants.js';
 import { S } from './city-constants.js';
 import { pick, clampToBlock, addBuilding, pushAABB, addNeonSign } from './city-helpers.js';
+import { registerStaticMesh } from './geometry-merger.js';
+
+const antennaMat = new THREE.MeshStandardMaterial({ color: 0xAAAAAA, metalness: 0.8, roughness: 0.3 });
+const spireMat = new THREE.MeshStandardMaterial({ color: 0xAAAAAA, metalness: 0.9, roughness: 0.2 });
 
 export function createSkyscraper(blockCenterX, blockCenterZ) {
   const count = 4 + Math.floor(Math.random() * 4); // 4-7
-  const antennaMat = new THREE.MeshStandardMaterial({ color: 0xAAAAAA, metalness: 0.8, roughness: 0.3 });
 
   // 15% chance of a supertall landmark per block (1 max)
   if (Math.random() < 0.15) {
@@ -18,10 +21,11 @@ export function createSkyscraper(blockCenterX, blockCenterZ) {
     pushAABB(blockCenterX, blockCenterZ, stW, stD, stH);
     const spire = new THREE.Mesh(
       new THREE.CylinderGeometry(0.1, 0.4, 25, 6),
-      new THREE.MeshStandardMaterial({ color: 0xAAAAAA, metalness: 0.9, roughness: 0.2 })
+      spireMat
     );
     spire.position.set(blockCenterX, stH + 12.5, blockCenterZ);
     scene.add(spire);
+    registerStaticMesh(spire, spireMat);
   }
 
   const gridCols = 2;
@@ -52,6 +56,7 @@ export function createSkyscraper(blockCenterX, blockCenterZ) {
     const antenna = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.3, 8, 6), antennaMat);
     antenna.position.set(cx, height + 4, cz);
     scene.add(antenna);
+    registerStaticMesh(antenna, antennaMat);
 
     // Penthouse setback (30% chance) — smaller box on top, adds 2nd AABB
     if (Math.random() < 0.3) {

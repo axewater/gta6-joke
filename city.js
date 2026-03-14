@@ -9,6 +9,7 @@ import {
 
 import { S, getDistrict, SPECIAL_BUILDINGS } from './city-constants.js';
 import { pick, clampToBlock, addBuilding, pushAABB, addNeonSign } from './city-helpers.js';
+import { registerStaticMesh } from './geometry-merger.js';
 import { createSkyscraper, createLShapedBuilding } from './city-buildings-downtown.js';
 import { createShop, createGasStation, createLiquorStore, createRestaurant, createDonutShop } from './city-buildings-commercial.js';
 import { createHouse, createApartmentBlock, createChurch, createMotel } from './city-buildings-residential.js';
@@ -85,6 +86,7 @@ export function createRamps() {
     mesh.castShadow = true;
     mesh.receiveShadow = true;
     scene.add(mesh);
+    registerStaticMesh(mesh, rampMat);
 
     // Chevron stripes on top surface (decorative)
     for (let s = 0; s < 3; s++) {
@@ -102,6 +104,7 @@ export function createRamps() {
       stripeGroup.position.set(rx, 0, rz);
       stripeGroup.rotation.y = rotY;
       scene.add(stripeGroup);
+      registerStaticMesh(stripe, stripeMat);
     }
 
     // Compute world-space AABB for the ramp
@@ -159,34 +162,41 @@ export async function createCity() {
     road.rotation.x = -Math.PI / 2;
     road.position.set(0, 0.01, z);
     scene.add(road);
+    registerStaticMesh(road, roadMat);
 
     const puddle = new THREE.Mesh(new THREE.PlaneGeometry(CITY_SIZE, ROAD * 0.6), puddleMat);
     puddle.rotation.x = -Math.PI / 2;
     puddle.position.set(0, 0.02, z);
     scene.add(puddle);
+    registerStaticMesh(puddle, puddleMat);
 
     const centerLine = new THREE.Mesh(new THREE.PlaneGeometry(CITY_SIZE, 0.3), yellowMat);
     centerLine.rotation.x = -Math.PI / 2;
     centerLine.position.set(0, 0.02, z);
     scene.add(centerLine);
+    registerStaticMesh(centerLine, yellowMat);
 
     for (let d = -HALF_CITY; d < HALF_CITY; d += 8) {
       const dash = new THREE.Mesh(new THREE.PlaneGeometry(4, 0.15), whiteMat);
       dash.rotation.x = -Math.PI / 2;
       dash.position.set(d + 2, 0.02, z + ROAD * 0.25);
       scene.add(dash);
+      registerStaticMesh(dash, whiteMat);
       const dash2 = dash.clone();
       dash2.position.z = z - ROAD * 0.25;
       scene.add(dash2);
+      registerStaticMesh(dash2, whiteMat);
     }
 
     const sw1 = new THREE.Mesh(new THREE.BoxGeometry(CITY_SIZE, 0.3, 1.5), sidewalkMat);
     sw1.position.set(0, 0.15, z + ROAD / 2 + 0.75);
     sw1.receiveShadow = true;
     scene.add(sw1);
+    registerStaticMesh(sw1, sidewalkMat);
     const sw2 = sw1.clone();
     sw2.position.z = z - ROAD / 2 - 0.75;
     scene.add(sw2);
+    registerStaticMesh(sw2, sidewalkMat);
   }
 
   // Vertical roads
@@ -196,34 +206,41 @@ export async function createCity() {
     road.rotation.x = -Math.PI / 2;
     road.position.set(x, 0.015, 0);
     scene.add(road);
+    registerStaticMesh(road, roadMat);
 
     const puddle = new THREE.Mesh(new THREE.PlaneGeometry(ROAD * 0.6, CITY_SIZE), puddleMat);
     puddle.rotation.x = -Math.PI / 2;
     puddle.position.set(x, 0.025, 0);
     scene.add(puddle);
+    registerStaticMesh(puddle, puddleMat);
 
     const centerLine = new THREE.Mesh(new THREE.PlaneGeometry(0.3, CITY_SIZE), yellowMat);
     centerLine.rotation.x = -Math.PI / 2;
     centerLine.position.set(x, 0.025, 0);
     scene.add(centerLine);
+    registerStaticMesh(centerLine, yellowMat);
 
     for (let d = -HALF_CITY; d < HALF_CITY; d += 8) {
       const dash = new THREE.Mesh(new THREE.PlaneGeometry(0.15, 4), whiteMat);
       dash.rotation.x = -Math.PI / 2;
       dash.position.set(x + ROAD * 0.25, 0.025, d + 2);
       scene.add(dash);
+      registerStaticMesh(dash, whiteMat);
       const dash2 = dash.clone();
       dash2.position.x = x - ROAD * 0.25;
       scene.add(dash2);
+      registerStaticMesh(dash2, whiteMat);
     }
 
     const sw1 = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.3, CITY_SIZE), sidewalkMat);
     sw1.position.set(x + ROAD / 2 + 0.75, 0.15, 0);
     sw1.receiveShadow = true;
     scene.add(sw1);
+    registerStaticMesh(sw1, sidewalkMat);
     const sw2 = sw1.clone();
     sw2.position.x = x - ROAD / 2 - 0.75;
     scene.add(sw2);
+    registerStaticMesh(sw2, sidewalkMat);
   }
 
   // ── District-aware building loop ──────────────────────────────────────
@@ -287,32 +304,49 @@ export async function createCity() {
     }
   }
 
-  // ── Street lights — 40 at intersections ───────────────────────────────
+  // ── Street lights — 40 at intersections (grouped for destruction) ─────
   const lightPoleMat = new THREE.MeshStandardMaterial({ color: 0x444444 });
   const bulbGeo = new THREE.SphereGeometry(0.3, 8, 8);
   const bulbMat = new THREE.MeshStandardMaterial({ color: 0xffeecc, emissive: 0xffeecc, emissiveIntensity: 1 });
+  state.bulbMat = bulbMat;
 
   for (let i = 0; i < 40; i++) {
     if (i > 0 && i % 10 === 0) await yieldFrame();
-    // Place at intersections
     const row = Math.floor(Math.random() * (GRID + 1));
     const col = Math.floor(Math.random() * (GRID + 1));
     const lx = -HALF_CITY + col * CELL + (Math.random() > 0.5 ? 1 : -1) * (ROAD / 2 + 0.5);
     const lz = -HALF_CITY + row * CELL + (Math.random() > 0.5 ? 1 : -1) * (ROAD / 2 + 0.5);
 
-    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 8, 6), lightPoleMat);
-    pole.position.set(lx, 4, lz);
-    scene.add(pole);
+    // Group so the whole light can fall as a unit
+    const group = new THREE.Group();
+    group.position.set(lx, 0, lz);
 
-    const bulb = new THREE.Mesh(bulbGeo, bulbMat.clone());
-    bulb.position.set(lx, 8.2, lz);
-    scene.add(bulb);
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 8, 6), lightPoleMat);
+    pole.position.set(0, 4, 0);
+    group.add(pole);
+
+    const bulb = new THREE.Mesh(bulbGeo, bulbMat);
+    bulb.position.set(0, 8.2, 0);
+    group.add(bulb);
 
     const pl = new THREE.PointLight(0xffeecc, 0.8, 30);
-    pl.position.set(lx, 8, lz);
+    pl.position.set(0, 8, 0);
     pl.castShadow = false;
-    scene.add(pl);
+    group.add(pl);
 
-    state.streetLights.push({ bulb, pointLight: pl });
+    scene.add(group);
+
+    // Collision AABB (thin pole footprint)
+    const aabb = { minX: lx - 0.3, maxX: lx + 0.3, minZ: lz - 0.3, maxZ: lz + 0.3, height: 8, destroyed: false };
+    state.buildings.push(aabb);
+
+    state.streetLights.push({
+      group, bulb, pointLight: pl,
+      x: lx, z: lz,
+      aabb,
+      destroyed: false,
+      fallTimer: 0,
+      fallDirX: 0, fallDirZ: 0
+    });
   }
 }

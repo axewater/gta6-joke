@@ -3,6 +3,8 @@ import { scene } from './renderer.js';
 import { state } from './state.js';
 import { GRID, CELL, CITY_SIZE, HALF_CITY, ROAD, WORLD_SCALE } from './constants.js';
 import { S } from './city-constants.js';
+import { registerStaticMesh } from './geometry-merger.js';
+import { pushAABB } from './city-helpers.js';
 
 const yieldFrame = () => new Promise(r => requestAnimationFrame(r));
 
@@ -132,29 +134,61 @@ export function createPalmTrees() {
   const trunkMat = new THREE.MeshStandardMaterial({ color: 0x8B6914, roughness: 0.9 });
   const canopyMat = new THREE.MeshStandardMaterial({ color: 0x228B22, roughness: 0.8 });
 
-  let placed = 0;
-  for (let i = 0; i <= GRID && placed < 50; i++) {
+  // Returns true if (px,pz) falls on any road in the grid
+  function isOnRoad(px, pz) {
+    const dx = ((px + HALF_CITY) % CELL + CELL) % CELL;
+    if (dx < ROAD / 2 + 1 || dx > CELL - ROAD / 2 - 1) return true;
+    const dz = ((pz + HALF_CITY) % CELL + CELL) % CELL;
+    if (dz < ROAD / 2 + 1 || dz > CELL - ROAD / 2 - 1) return true;
+    return false;
+  }
+
+  function placeTree(px, pz) {
+    if (isOnRoad(px, pz)) return;
+
+    const heightScale = 0.75 + Math.random() * 0.5; // ±25% variance
+    const trunkH = 6 * heightScale;
+
+    const group = new THREE.Group();
+    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.35, trunkH, 8), trunkMat);
+    trunk.position.y = trunkH / 2;
+    group.add(trunk);
+    const canopy = new THREE.Mesh(new THREE.SphereGeometry(2.5, 8, 6), canopyMat);
+    canopy.position.y = trunkH + 0.5;
+    canopy.scale.set(1, 0.5, 1);
+    group.add(canopy);
+
+    group.rotation.x = (Math.random() - 0.5) * 0.1;
+    group.rotation.z = (Math.random() - 0.5) * 0.1;
+    group.position.set(px, 0, pz);
+    scene.add(group);
+    state.palmTrees.push(group);
+    registerStaticMesh(trunk, trunkMat);
+    registerStaticMesh(canopy, canopyMat);
+    pushAABB(px, pz, 1, 1, trunkH);
+  }
+
+  // Trees along horizontal roads
+  for (let i = 0; i <= GRID; i++) {
     const z = -HALF_CITY + i * CELL;
-    for (let x = -HALF_CITY; x < HALF_CITY && placed < 50; x += 20) {
-      const px = x + (Math.random() - 0.5) * 4;
+    for (let x = -HALF_CITY + 10; x < HALF_CITY - 10; x += 12) {
+      if (Math.random() < 0.3) continue; // occasional gap for variety
       const side = Math.random() > 0.5 ? 1 : -1;
-      const pz = z + side * (ROAD / 2 + 2);
+      const pz = z + side * (ROAD / 2 + 1.5);
+      const px = x + (Math.random() - 0.5) * 3;
+      placeTree(px, pz);
+    }
+  }
 
-      const group = new THREE.Group();
-      const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.35, 6, 8), trunkMat);
-      trunk.position.y = 3;
-      group.add(trunk);
-      const canopy = new THREE.Mesh(new THREE.SphereGeometry(2.5, 8, 6), canopyMat);
-      canopy.position.y = 6.5;
-      canopy.scale.set(1, 0.5, 1);
-      group.add(canopy);
-
-      group.rotation.x = (Math.random() - 0.5) * 0.1;
-      group.rotation.z = (Math.random() - 0.5) * 0.1;
-      group.position.set(px, 0, pz);
-      scene.add(group);
-      state.palmTrees.push(group);
-      placed++;
+  // Trees along vertical roads
+  for (let j = 0; j <= GRID; j++) {
+    const x = -HALF_CITY + j * CELL;
+    for (let z = -HALF_CITY + 10; z < HALF_CITY - 10; z += 12) {
+      if (Math.random() < 0.3) continue;
+      const side = Math.random() > 0.5 ? 1 : -1;
+      const px = x + side * (ROAD / 2 + 1.5);
+      const pz = z + (Math.random() - 0.5) * 3;
+      placeTree(px, pz);
     }
   }
 }
@@ -278,33 +312,41 @@ export async function createMountains() {
   const snowMat = new THREE.MeshStandardMaterial({ color: 0xeeeeff, roughness: 0.55 });
   const rockColors = [0x6b6560, 0x7a7065, 0x5a5550, 0x706860, 0x6a6055, 0x807870];
 
+  // Pre-create pooled materials for rocks (6 colors) and forests (4 green buckets)
+  const rockMats = rockColors.map(c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.92 }));
+  const forestBuckets = [0.3, 0.5, 0.7, 0.9];
+  const forestMats = forestBuckets.map(gv => new THREE.MeshStandardMaterial({
+    color: new THREE.Color(0.06, gv, 0.04), roughness: 0.95
+  }));
+
   function makeMountain(cx, cz, height, greenness) {
     const baseRadius = height * 0.5 + (15 + Math.random() * 20) * S;
     const segs = 6 + Math.floor(Math.random() * 3);
     const rotY = Math.random() * Math.PI * 2;
 
-    // Rocky body
-    const rockMat = new THREE.MeshStandardMaterial({
-      color: rockColors[Math.floor(Math.random() * rockColors.length)],
-      roughness: 0.92
-    });
+    // Rocky body — use pooled material
+    const rockMat = rockMats[Math.floor(Math.random() * rockMats.length)];
     const rock = new THREE.Mesh(new THREE.ConeGeometry(baseRadius, height, segs), rockMat);
     rock.position.set(cx, height / 2, cz);
     rock.rotation.y = rotY;
     scene.add(rock);
+    registerStaticMesh(rock, rockMat);
 
-    // Forest layer — height controlled by greenness (0=sparse, 1=lush)
+    // Forest layer — bucket greenness to nearest pool entry
     const forestTop = height * (0.35 + greenness * 0.22);
     const forestRadius = baseRadius * (0.72 + greenness * 0.15);
     const gv = 0.2 + greenness * 0.5;
-    const forestMat = new THREE.MeshStandardMaterial({
-      color: new THREE.Color(0.05 + greenness * 0.02, gv, 0.04),
-      roughness: 0.95
-    });
+    let bestIdx = 0, bestDist = Math.abs(gv - forestBuckets[0]);
+    for (let i = 1; i < forestBuckets.length; i++) {
+      const d = Math.abs(gv - forestBuckets[i]);
+      if (d < bestDist) { bestDist = d; bestIdx = i; }
+    }
+    const forestMat = forestMats[bestIdx];
     const forest = new THREE.Mesh(new THREE.ConeGeometry(forestRadius, forestTop, segs), forestMat);
     forest.position.set(cx, forestTop / 2, cz);
     forest.rotation.y = rotY + 0.3;
     scene.add(forest);
+    registerStaticMesh(forest, forestMat);
 
     // Snow cap for mountains taller than 130 units
     if (height > 130 * S) {
@@ -314,6 +356,7 @@ export async function createMountains() {
       const snow = new THREE.Mesh(new THREE.ConeGeometry(snowR, snowH, segs), snowMat);
       snow.position.set(cx, height - snowH / 2 + 0.5, cz);
       scene.add(snow);
+      registerStaticMesh(snow, snowMat);
     }
 
     // Collision footprint

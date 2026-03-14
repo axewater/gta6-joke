@@ -5,16 +5,20 @@ import { setupLighting, createCity, createRamps, createOceanAndBeach, createPalm
 import { createPlayer, createNPCs, createGangNPCs } from './characters.js';
 import { spawnVehicles, createTrafficCars } from './vehicles.js';
 import { updateRagdoll, checkVehiclePlayerCollision, triggerRagdoll } from './physics.js';
-import { updateNPCs, updateTrafficCars, updatePolice, updatePoliceOfficers, updateTanks, updateGangNPCs, updateGangBullets } from './ai.js';
-import { updatePlayer, updateVehicle, updateTireSmoke, handleVehicleToggle, handlePunch, handleShoot, updateBullets, updateMoneyPickups, updateWanted, updateDeath, commitCrime } from './player.js';
+import { updateNPCs, updateTrafficCars, updatePolice, updatePoliceOfficers, updateTanks, updateGangNPCs } from './ai.js';
+import { updatePlayer, updateVehicle, handleVehicleToggle, handlePunch, handleShoot, updateMoneyPickups, updateWanted, updateDeath } from './player.js';
 import { createRain, updateRain } from './weather.js';
 import { updateCamera } from './camera.js';
 import { initHUD, updateHUD, updateMinimap } from './hud.js';
 import { updateDayNight, updateClouds } from './daynight.js';
-import { checkPlayerCarNpcCollision, checkCarCarCollisions } from './collision.js';
+import { checkPlayerCarNpcCollision, checkCarCarCollisions, checkStreetLightCollision, updateFallingLights } from './collision.js';
 import { updateNpcRagdolls } from './npc-ragdoll.js';
 import { updateExplosions, setTriggerRagdoll, initExplosionPool } from './vehicle-damage.js';
 import { updateHelicopter } from './helicopter.js';
+import { finalizeStaticMeshes } from './geometry-merger.js';
+import { SpatialGrid } from './spatial-grid.js';
+import { playerBulletPool, policeBulletPool, gangBulletPool, tireSmokePool, tankShellPool, missilePool } from './object-pool.js';
+import { registerSystem, runSystems, playerBulletSystem, policeBulletSystem, gangBulletSystem, tankShellSystem, missileSystem, tireSmokeSystem } from './systems.js';
 
 let clock;
 
@@ -39,6 +43,14 @@ async function init() {
     { fn: createClouds, label: 'Generating clouds...' },
     { fn: createSkyDome, label: 'Building sky...' },
     { fn: createRain, label: 'Setting up weather...' },
+    { fn: () => {
+      playerBulletPool.init();
+      policeBulletPool.init();
+      gangBulletPool.init();
+      tireSmokePool.init();
+      tankShellPool.init();
+      missilePool.init();
+    }, label: 'Pre-allocating pools...' },
     { fn: initExplosionPool, label: 'Loading effects...' },
     { fn: createPlayer, label: 'Creating player...' },
     { fn: spawnVehicles, label: 'Spawning vehicles...' },
@@ -49,9 +61,34 @@ async function init() {
     { fn: createMoneyPickups, label: 'Placing pickups...' },
     { fn: createGunStore, label: 'Opening stores...' },
     { fn: initHUD, label: 'Setting up HUD...' },
+    { fn: () => {
+      state.mergedMeshes = finalizeStaticMeshes();
+    }, label: 'Optimizing geometry...' },
+    { fn: () => {
+      const grid = new SpatialGrid();
+      // Merged chunk meshes are NOT inserted — Three.js frustum culling
+      // handles them fine since they're already chunked (~25 per material).
+      // Insert remaining individual building meshes (windowed, still in scene)
+      for (const m of state.buildingMeshes) {
+        if (m.parent) grid.insert(m, m.position.x, m.position.z);
+      }
+      // Insert NPCs
+      for (const npc of state.npcs) {
+        if (npc.mesh) grid.insert(npc.mesh, npc.x, npc.z);
+      }
+      // Insert traffic cars
+      for (const car of state.trafficCars) {
+        if (car.mesh) grid.insert(car.mesh, car.x, car.z);
+      }
+      // Insert gang NPCs
+      for (const gnpc of state.gangNpcs) {
+        if (gnpc.mesh) grid.insert(gnpc.mesh, gnpc.x, gnpc.z);
+      }
+      state.spatialGrid = grid;
+    }, label: 'Building spatial grid...' },
   ];
 
-  // +2 for the async compile and first-render steps below
+  // +2 for the async compile and first-render steps below (geometry merge & spatial grid are already in steps)
   const total = steps.length + 2;
 
   for (let i = 0; i < steps.length; i++) {
@@ -152,6 +189,75 @@ async function init() {
     if (hint) hint.style.opacity = '0';
   }, 5000);
 
+  // ── Register all systems ──────────────────────────────────────────────
+  // Priority 0: Player movement
+  registerSystem('playerMovement', (dt) => {
+    if (state.isInVehicle) {
+      updateVehicle(dt);
+      checkPlayerCarNpcCollision();
+      checkCarCarCollisions();
+      checkStreetLightCollision();
+    } else {
+      updatePlayer(dt);
+      updateRagdoll(dt);
+    }
+  });
+
+  // Priority 1: Physics & collisions
+  registerSystem('vehicleCollision', (dt) => checkVehiclePlayerCollision());
+  registerSystem('fallingLights', (dt) => updateFallingLights(dt));
+  registerSystem('npcRagdolls', (dt) => updateNpcRagdolls(dt));
+  registerSystem('explosions', (dt) => updateExplosions(dt));
+
+  // Priority 2: Camera & game state
+  registerSystem('camera', (dt) => updateCamera(dt));
+  registerSystem('death', (dt) => updateDeath(dt));
+  registerSystem('wanted', (dt) => updateWanted(dt));
+  registerSystem('moneyPickups', (dt) => updateMoneyPickups(dt));
+  registerSystem('dayNight', (dt) => updateDayNight(dt));
+  registerSystem('clouds', (dt) => updateClouds(dt));
+
+  // Priority 3: AI systems (every 2 frames)
+  registerSystem('npcAI', (dt) => updateNPCs(dt), 2);
+  registerSystem('trafficAI', (dt) => updateTrafficCars(dt), 2);
+  registerSystem('trafficLights', (dt) => updateTrafficLights(dt), 2);
+  registerSystem('gangAI', (dt) => updateGangNPCs(dt), 2);
+  registerSystem('spatialGrid', () => {
+    if (state.spatialGrid) {
+      for (const npc of state.npcs) {
+        if (npc.mesh) state.spatialGrid.move(npc.mesh, npc.x, npc.z);
+      }
+      for (const car of state.trafficCars) {
+        if (car.mesh) state.spatialGrid.move(car.mesh, car.x, car.z);
+      }
+      for (const gnpc of state.gangNpcs) {
+        if (gnpc.mesh) state.spatialGrid.move(gnpc.mesh, gnpc.x, gnpc.z);
+      }
+      state.spatialGrid.update(camera);
+    }
+  }, 2);
+
+  // Priority 4: Law enforcement AI
+  registerSystem('policeCars', (dt) => updatePolice(dt));
+  registerSystem('policeOfficers', (dt) => updatePoliceOfficers(dt));
+  registerSystem('helicopter', (dt) => updateHelicopter(dt));
+  registerSystem('tanks', (dt) => updateTanks(dt));
+
+  // Priority 5: Projectile systems (tight loops with swap-and-pop)
+  registerSystem('playerBullets', playerBulletSystem);
+  registerSystem('policeBullets', policeBulletSystem);
+  registerSystem('gangBullets', gangBulletSystem);
+  registerSystem('tankShells', tankShellSystem);
+  registerSystem('missiles', missileSystem);
+
+  // Priority 6: Particles & effects
+  registerSystem('tireSmoke', tireSmokeSystem);
+  registerSystem('rain', (dt) => updateRain(dt));
+
+  // Priority 7: HUD
+  registerSystem('hud', () => updateHUD());
+  registerSystem('minimap', () => updateMinimap(), 3);
+
   gameLoop();
 }
 
@@ -162,60 +268,20 @@ function gameLoop() {
   if (dt > 0.05) dt = 0.05;
   state.elapsedTime += dt;
 
-  if (state.isInVehicle) {
-    updateVehicle(dt);
-    checkPlayerCarNpcCollision();
-    checkCarCarCollisions();
-  } else {
-    updatePlayer(dt);
-    updateRagdoll(dt);
-  }
-
-  checkVehiclePlayerCollision();
-  updateNpcRagdolls(dt);
-  updateExplosions(dt);
-  updateCamera(dt);
-  updateDeath(dt);
-  updateWanted(dt);
-  updateMoneyPickups(dt);
-  updateDayNight(dt);
-  updateClouds(dt);
-
-  if (state.frameCount % 2 === 0) {
-    updateNPCs(dt * 2);
-    updateTrafficCars(dt * 2);
-    updateTrafficLights(dt * 2);
-    updateGangNPCs(dt * 2);
-  }
-
-  updatePolice(dt);
-  updatePoliceOfficers(dt);
-  updateHelicopter(dt);
-  updateTanks(dt);
-  updateBullets(dt);
-  updateGangBullets(dt);
+  runSystems(dt, state.frameCount);
 
   if (state.shootCooldown > 0) state.shootCooldown -= dt;
 
-  // Gun store icon spin
   if (state.gunStore && state.gunStore.icon) {
     state.gunStore.icon.rotation.y += dt * 2;
     state.gunStore.icon.position.y = 6 + Math.sin(state.elapsedTime * 2) * 0.3;
   }
 
-  updateHUD();
-
-  // Update ocean shader time uniform
   if (state.oceanMaterial) {
     state.oceanMaterial.uniforms.time.value = state.elapsedTime;
   }
 
-  updateRain(dt);
-  updateTireSmoke(dt);
-
   state.frameCount++;
-  if (state.frameCount % 3 === 0) updateMinimap();
-
   state.mouse.dx = 0;
   state.mouse.dy = 0;
 

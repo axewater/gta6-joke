@@ -137,8 +137,12 @@ export function updateDayNight(dt) {
   // ── Street lights ─────────────────────────────────────────────────────
   const lightTarget = isNight ? 1.0 : 0.2;
   for (const sl of state.streetLights) {
+    if (sl.destroyed) continue;
     sl.pointLight.intensity += (lightTarget - sl.pointLight.intensity) * dt * 2;
-    sl.bulb.material.emissiveIntensity += (lightTarget - sl.bulb.material.emissiveIntensity) * dt * 2;
+  }
+  // Shared bulb material — animate once instead of per-bulb
+  if (state.bulbMat) {
+    state.bulbMat.emissiveIntensity += (lightTarget - state.bulbMat.emissiveIntensity) * dt * 2;
   }
 
   // ── Neon ──────────────────────────────────────────────────────────────

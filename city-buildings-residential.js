@@ -4,6 +4,15 @@ import { state } from './state.js';
 import { BLOCK, RESIDENTIAL_COLORS } from './constants.js';
 import { S } from './city-constants.js';
 import { pick, clampToBlock, addBuilding, pushAABB } from './city-helpers.js';
+import { registerStaticMesh } from './geometry-merger.js';
+
+// Module-scope materials for geometry merging
+const fenceMat = new THREE.MeshStandardMaterial({ color: 0xDDDDDD, roughness: 0.7 });
+const escapeMat = new THREE.MeshStandardMaterial({ color: 0x444444, metalness: 0.6 });
+const steepleMat = new THREE.MeshStandardMaterial({ color: 0xFFFFEE, roughness: 0.7 });
+const pyramidMat = new THREE.MeshStandardMaterial({ color: 0x8B4513, roughness: 0.8 });
+const crossMat = new THREE.MeshStandardMaterial({ color: 0xFFD700, metalness: 0.6 });
+const railMat = new THREE.MeshStandardMaterial({ color: 0x666666, metalness: 0.5 });
 
 export function createHouse(blockCenterX, blockCenterZ) {
   const count = 1 + Math.floor(Math.random() * 2); // 1-2 houses
@@ -33,19 +42,20 @@ export function createHouse(blockCenterX, blockCenterZ) {
 
     // Small fence around base (decorative, no AABB)
     if (Math.random() < 0.5) {
-      const fenceMat = new THREE.MeshStandardMaterial({ color: 0xDDDDDD, roughness: 0.7 });
       const fenceH = 1.2;
       // Front and back
       for (const zOff of [-actualD / 2 - 1.5, actualD / 2 + 1.5]) {
         const f = new THREE.Mesh(new THREE.BoxGeometry(actualW + 4, fenceH, 0.15), fenceMat);
         f.position.set(cx, fenceH / 2, cz + zOff);
         scene.add(f);
+        registerStaticMesh(f, fenceMat);
       }
       // Sides
       for (const xOff of [-actualW / 2 - 2, actualW / 2 + 2]) {
         const f = new THREE.Mesh(new THREE.BoxGeometry(0.15, fenceH, actualD + 3), fenceMat);
         f.position.set(cx + xOff, fenceH / 2, cz);
         scene.add(f);
+        registerStaticMesh(f, fenceMat);
       }
     }
   }
@@ -61,7 +71,6 @@ export function createApartmentBlock(blockCenterX, blockCenterZ) {
   pushAABB(blockCenterX, blockCenterZ, w, d, h);
 
   // Fire escape zig-zag on side
-  const escapeMat = new THREE.MeshStandardMaterial({ color: 0x444444, metalness: 0.6 });
   const floors = Math.floor(h / 4);
   for (let f = 0; f < floors; f++) {
     const y = 2 + f * 4;
@@ -69,10 +78,12 @@ export function createApartmentBlock(blockCenterX, blockCenterZ) {
     const plat = new THREE.Mesh(new THREE.BoxGeometry(3, 0.1, 1.5), escapeMat);
     plat.position.set(blockCenterX + w / 2 + 0.8, y, blockCenterZ + (f % 2 === 0 ? -2 : 2));
     scene.add(plat);
+    registerStaticMesh(plat, escapeMat);
     // Railing
     const rail = new THREE.Mesh(new THREE.BoxGeometry(0.08, 1, 1.5), escapeMat);
     rail.position.set(blockCenterX + w / 2 + 2.2, y + 0.5, blockCenterZ + (f % 2 === 0 ? -2 : 2));
     scene.add(rail);
+    registerStaticMesh(rail, escapeMat);
   }
 }
 
@@ -85,27 +96,28 @@ export function createChurch(blockCenterX, blockCenterZ) {
   pushAABB(blockCenterX, blockCenterZ, w, d, h);
 
   // Steeple - tall thin box
-  const steepleMat = new THREE.MeshStandardMaterial({ color: 0xFFFFEE, roughness: 0.7 });
   const steeple = new THREE.Mesh(new THREE.BoxGeometry(3 * S, 12 * S, 3 * S), steepleMat);
   steeple.position.set(blockCenterX, h + 6 * S, blockCenterZ - d / 2 + 3 * S);
   scene.add(steeple);
+  registerStaticMesh(steeple, steepleMat);
 
   // Pyramid top
   const pyramidGeo = new THREE.ConeGeometry(2.5 * S, 6 * S, 4);
-  const pyramidMat = new THREE.MeshStandardMaterial({ color: 0x8B4513, roughness: 0.8 });
   const pyramid = new THREE.Mesh(pyramidGeo, pyramidMat);
   pyramid.position.set(blockCenterX, h + 15 * S, blockCenterZ - d / 2 + 3 * S);
   pyramid.rotation.y = Math.PI / 4;
   scene.add(pyramid);
+  registerStaticMesh(pyramid, pyramidMat);
 
   // Cross on top (not AABB) — sits on pyramid tip at h + 18*S
-  const crossMat = new THREE.MeshStandardMaterial({ color: 0xFFD700, metalness: 0.6 });
   const crossV = new THREE.Mesh(new THREE.BoxGeometry(0.4, 4, 0.4), crossMat);
   crossV.position.set(blockCenterX, h + 18 * S + 2, blockCenterZ - d / 2 + 3 * S);
   scene.add(crossV);
+  registerStaticMesh(crossV, crossMat);
   const crossH = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.4, 0.4), crossMat);
   crossH.position.set(blockCenterX, h + 18 * S + 3, blockCenterZ - d / 2 + 3 * S);
   scene.add(crossH);
+  registerStaticMesh(crossH, crossMat);
 }
 
 // ── Motel ────────────────────────────────────────────────────────────
@@ -121,10 +133,10 @@ export function createMotel(blockCenterX, blockCenterZ) {
   pushAABB(blockCenterX + 10 * S, blockCenterZ + 2 * S, w2, d2, h);
 
   // Corridor railings (exterior walkway)
-  const railMat = new THREE.MeshStandardMaterial({ color: 0x666666, metalness: 0.5 });
   const rail = new THREE.Mesh(new THREE.BoxGeometry(w1 - 2, 0.1, 0.1), railMat);
   rail.position.set(blockCenterX, 4.5 * S, blockCenterZ - 6.1 * S);
   scene.add(rail);
+  registerStaticMesh(rail, railMat);
 
   // "MOTEL" neon sign
   const signMat = new THREE.MeshStandardMaterial({ color: 0x00FFFF, emissive: 0x00FFFF, emissiveIntensity: 3 });

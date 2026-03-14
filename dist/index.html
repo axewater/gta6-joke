@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GTA VI</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { overflow: hidden; background: #000; width: 100%; height: 100%; }
+canvas#gameCanvas { display: block; }
+
+#hud {
+  position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+  pointer-events: none; z-index: 10; font-family: 'Impact', 'Arial Black', sans-serif;
+}
+
+#title {
+  position: absolute; top: 18px; left: 50%; transform: translateX(-50%);
+  font-size: 42px; color: #f5c518; letter-spacing: 4px;
+  -webkit-text-stroke: 2px #000; text-shadow: 3px 3px 6px rgba(0,0,0,0.7);
+}
+
+#money {
+  position: absolute; top: 20px; left: 20px;
+  font-size: 28px; color: #4caf50; letter-spacing: 1px;
+  text-shadow: 2px 2px 4px rgba(0,0,0,0.7);
+}
+
+#game-clock {
+  position: absolute; top: 52px; left: 20px;
+  font-size: 18px; color: #fff; font-family: Arial, sans-serif;
+  text-shadow: 1px 1px 3px rgba(0,0,0,0.7);
+}
+
+#weapon {
+  position: absolute; bottom: 68px; left: 20px;
+  font-size: 16px; color: #ddd; font-family: Arial, sans-serif;
+  text-shadow: 1px 1px 3px rgba(0,0,0,0.7);
+}
+
+#health-bar-container {
+  position: absolute; bottom: 30px; left: 20px;
+  width: 200px; height: 16px; background: rgba(0,0,0,0.6);
+  border: 2px solid rgba(255,255,255,0.3); border-radius: 3px;
+}
+#health-bar {
+  width: 100%; height: 100%; background: #4caf50; border-radius: 2px;
+  transition: width 0.3s, background-color 0.3s;
+}
+#health-label {
+  position: absolute; bottom: 50px; left: 20px; color: #fff;
+  font-size: 14px; font-family: Arial, sans-serif; text-shadow: 1px 1px 2px #000;
+}
+
+#wanted-stars {
+  position: absolute; top: 20px; right: 20px;
+  font-size: 28px; letter-spacing: 4px; text-shadow: 2px 2px 4px rgba(0,0,0,0.7);
+}
+
+#radio-popup {
+  position: absolute; bottom: 100px; left: 50%; transform: translateX(-50%);
+  font-size: 20px; color: #f5c518; font-family: 'Impact', sans-serif;
+  text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+  background: rgba(0,0,0,0.5); padding: 8px 24px; border-radius: 6px;
+  opacity: 0; transition: opacity 0.5s;
+}
+#radio-popup.show { opacity: 1; }
+
+#wasted-overlay {
+  position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+  background: rgba(120, 0, 0, 0.6);
+  display: none; align-items: center; justify-content: center;
+  z-index: 15; pointer-events: none;
+}
+#wasted-overlay span {
+  font-size: 96px; color: #fff; font-family: 'Impact', sans-serif;
+  -webkit-text-stroke: 3px #000;
+  text-shadow: 4px 4px 12px rgba(0,0,0,0.9);
+  letter-spacing: 12px;
+}
+
+#minimap-container {
+  position: absolute; bottom: 20px; right: 20px;
+  width: 150px; height: 150px; border-radius: 50%;
+  overflow: hidden; border: 3px solid rgba(255,255,255,0.3);
+  background: rgba(0,0,0,0.5);
+}
+#minimap {
+  width: 150px; height: 150px;
+}
+
+#controls-hint {
+  position: absolute; bottom: 60px; left: 50%; transform: translateX(-50%);
+  color: rgba(255,255,255,0.8); font-family: Arial, sans-serif; font-size: 13px;
+  text-align: center; text-shadow: 1px 1px 3px #000;
+  transition: opacity 1s;
+}
+
+#click-overlay {
+  position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+  background: rgba(0,0,0,0.85); z-index: 20;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; flex-direction: column;
+}
+#click-overlay #play-text {
+  color: #f5c518; font-family: 'Impact', sans-serif; font-size: 48px;
+  -webkit-text-stroke: 2px #000; text-shadow: 3px 3px 8px rgba(0,0,0,0.8);
+  animation: pulse 2s ease-in-out infinite;
+}
+
+/* Loading screen */
+#loading-container { text-align: center; }
+#loading-title {
+  color: #f5c518; font-family: 'Impact', sans-serif; font-size: 72px;
+  -webkit-text-stroke: 2px #000; text-shadow: 3px 3px 10px rgba(0,0,0,0.9);
+  letter-spacing: 8px; margin-bottom: 40px;
+}
+#loading-bar-outer {
+  width: 400px; height: 18px; background: rgba(255,255,255,0.08);
+  border: 2px solid rgba(255,255,255,0.2); border-radius: 9px;
+  overflow: hidden; margin: 0 auto 14px;
+}
+#loading-bar-inner {
+  width: 0%; height: 100%;
+  background: linear-gradient(90deg, #f5c518, #ff8c42);
+  border-radius: 7px; transition: width 0.15s;
+}
+#loading-status {
+  color: rgba(255,255,255,0.5); font-family: Arial, sans-serif; font-size: 13px;
+  letter-spacing: 1px;
+}
+
+@keyframes pulse {
+  0%, 100% { transform: scale(1); opacity: 0.9; }
+  50% { transform: scale(1.05); opacity: 1; }
+}
+</style>
+
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+  <script type="module" crossorigin src="/assets/index-eIrU4eVO.js"></script>
+</head>
+<body>
+
+<div id="click-overlay">
+  <div id="loading-container">
+    <div id="loading-title">GTA VI</div>
+    <div id="loading-bar-outer">
+      <div id="loading-bar-inner"></div>
+    </div>
+    <div id="loading-status">Initializing...</div>
+  </div>
+  <span id="play-text" style="display:none">Click to Play</span>
+</div>
+
+<div id="hud">
+  <div id="title">GTA VI</div>
+
+  <div id="money">$0</div>
+  <div id="game-clock">12:00</div>
+
+  <div id="wanted-stars">
+    <span class="star">&#9733;</span><span class="star">&#9733;</span><span class="star">&#9733;</span><span class="star">&#9733;</span><span class="star">&#9733;</span>
+  </div>
+
+  <div id="weapon">&#9994; FIST</div>
+
+  <div id="health-label">HEALTH</div>
+  <div id="health-bar-container"><div id="health-bar"></div></div>
+
+  <div id="radio-popup"></div>
+
+  <div id="minimap-container">
+    <canvas id="minimap" width="150" height="150"></canvas>
+  </div>
+
+  <div id="controls-hint">
+    WASD — Move &nbsp;|&nbsp; Mouse — Look &nbsp;|&nbsp; Shift — Sprint &nbsp;|&nbsp; Space — Jump &nbsp;|&nbsp; E — Enter/Exit Vehicle &nbsp;|&nbsp; Left Click — Punch/Shoot &nbsp;|&nbsp; F — Buy Gun
+  </div>
+</div>
+
+<div id="wasted-overlay"><span>WASTED</span></div>
+
+</body>
+</html>
