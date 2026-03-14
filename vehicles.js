@@ -3,6 +3,8 @@ import { scene } from './renderer.js';
 import { state } from './state.js';
 import { GRID, CELL, HALF_CITY, TRAFFIC_CAR_COUNT } from './constants.js';
 
+const yieldFrame = () => new Promise(r => requestAnimationFrame(r));
+
 // ── Shared materials ───────────────────────────────────────────────────
 const chromeMat = new THREE.MeshStandardMaterial({ color: 0xcccccc, roughness: 0.1, metalness: 0.9 });
 const glassMat = new THREE.MeshStandardMaterial({
@@ -631,7 +633,7 @@ export function spawnVehicles() {
 }
 
 // ── Traffic cars ───────────────────────────────────────────────────────
-export function createTrafficCars() {
+export async function createTrafficCars() {
   const colors = [
     0xFF6633, 0x33CCFF, 0xFFCC00, 0xCC33FF, 0x33FF66, 0xFF3366,
     0x4488FF, 0xFF8844, 0x44CC88, 0xDD4477, 0x88BBDD, 0xEEAA33,
@@ -639,6 +641,7 @@ export function createTrafficCars() {
   ];
   const sportsColors = [0xFF0000, 0xFF4400, 0x0044FF, 0xFFFFFF, 0x111111, 0xFFCC00];
   for (let i = 0; i < TRAFFIC_CAR_COUNT; i++) {
+    if (i > 0 && i % 5 === 0) await yieldFrame();
     const roadIdx = 1 + Math.floor(Math.random() * (GRID - 1));
     const horizontal = Math.random() > 0.5;
     let x, z, rot;

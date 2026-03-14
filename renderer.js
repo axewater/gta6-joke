@@ -5,6 +5,7 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { state } from './state.js';
+import { WORLD_SCALE } from './constants.js';
 
 export let renderer, scene, camera, composer;
 
@@ -128,9 +129,9 @@ export function initRenderer() {
   renderer.domElement.id = 'gameCanvas';
 
   scene = new THREE.Scene();
-  scene.fog = new THREE.Fog(0xFFA062, 200, 500);
+  scene.fog = new THREE.Fog(0xFFA062, 200 * WORLD_SCALE, 500 * WORLD_SCALE);
 
-  camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.5, 600);
+  camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.5, 600 * WORLD_SCALE);
 
   // Environment cube map for PBR reflections
   createEnvMap();

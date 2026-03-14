@@ -51,25 +51,41 @@ async function init() {
     { fn: initHUD, label: 'Setting up HUD...' },
   ];
 
-  // +2 for the compile and first-render steps below
+  // +2 for the async compile and first-render steps below
   const total = steps.length + 2;
 
   for (let i = 0; i < steps.length; i++) {
     status.textContent = steps[i].label;
     bar.style.width = Math.round((i / total) * 100) + '%';
     await yieldFrame();
-    steps[i].fn();
+    await steps[i].fn();
   }
 
-  // Compile shaders — this can block the thread for several seconds.
-  // Show the label first so the user knows what's happening.
-  status.textContent = 'Compiling shaders...';
-  bar.style.width = Math.round((steps.length / total) * 100) + '%';
-  await yieldFrame();
-  renderer.compile(scene, camera);
+  // Batched async shader compilation with progress
+  const allMeshes = [];
+  scene.traverse(obj => {
+    if (obj.isMesh || obj.isPoints || obj.isLine) {
+      allMeshes.push(obj);
+      obj.visible = false;
+    }
+  });
 
-  // First render — some browsers defer GPU compilation until the first draw call,
-  // which can also take several seconds.
+  const BATCH = 100;
+  const baseWidth = steps.length / total;
+  const nextWidth = (steps.length + 1) / total;
+
+  for (let i = 0; i < allMeshes.length; i += BATCH) {
+    const end = Math.min(i + BATCH, allMeshes.length);
+    for (let j = i; j < end; j++) allMeshes[j].visible = true;
+
+    const progress = Math.min(end / allMeshes.length, 1);
+    status.textContent = `Compiling shaders... ${Math.round(progress * 100)}%`;
+    bar.style.width = Math.round((baseWidth + progress * (nextWidth - baseWidth)) * 100) + '%';
+    await yieldFrame();
+    await renderer.compileAsync(scene, camera);
+  }
+
+  // First render — shaders already compiled, should be fast
   status.textContent = 'Starting engine...';
   bar.style.width = Math.round(((steps.length + 1) / total) * 100) + '%';
   await yieldFrame();

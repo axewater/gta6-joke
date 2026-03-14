@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { scene } from './renderer.js';
 import { state } from './state.js';
-import { BLOOM_STRENGTH_DAY, BLOOM_STRENGTH_NIGHT, CITY_SIZE } from './constants.js';
+import { BLOOM_STRENGTH_DAY, BLOOM_STRENGTH_NIGHT, CITY_SIZE, WORLD_SCALE } from './constants.js';
 
 export function updateDayNight(dt) {
   // 60 real seconds = 1 game day
@@ -12,10 +12,10 @@ export function updateDayNight(dt) {
 
   // Sun orbit
   const sunAngle = t * Math.PI * 2 - Math.PI / 2;
-  const sunY = Math.sin(sunAngle) * 120;
-  const sunXZ = Math.cos(sunAngle) * 150;
-  state.sun.position.set(sunXZ, Math.max(sunY, -20), 80);
-  state.sun.intensity = Math.max(0, Math.min(1.5, sunY / 60));
+  const sunY = Math.sin(sunAngle) * 120 * WORLD_SCALE;
+  const sunXZ = Math.cos(sunAngle) * 150 * WORLD_SCALE;
+  state.sun.position.set(sunXZ, Math.max(sunY, -20), 80 * WORLD_SCALE);
+  state.sun.intensity = Math.max(0, Math.min(1.5, sunY / (60 * WORLD_SCALE)));
 
   const nightColor = new THREE.Color(0x05030f);
   const sunsetColor = new THREE.Color(0xFFA062);
@@ -83,14 +83,14 @@ export function updateDayNight(dt) {
   // ── Sun Mesh ──────────────────────────────────────────────────────────
   if (state.sunMesh) {
     const sunNorm = state.sun.position.clone().normalize();
-    state.sunMesh.position.copy(sunNorm).multiplyScalar(400);
+    state.sunMesh.position.copy(sunNorm).multiplyScalar(400 * WORLD_SCALE);
     state.sunMesh.visible = state.sun.intensity > 0.1;
   }
 
   // ── Moon Mesh ─────────────────────────────────────────────────────────
   if (state.moonMesh) {
     const sunNorm = state.sun.position.clone().normalize();
-    state.moonMesh.position.copy(sunNorm).multiplyScalar(-400);
+    state.moonMesh.position.copy(sunNorm).multiplyScalar(-400 * WORLD_SCALE);
     state.moonMesh.visible = isNight;
   }
 

@@ -4,6 +4,8 @@ import { state } from './state.js';
 import { GRID, CELL, HALF_CITY, ROAD, TROPICAL_OUTFIT_COLORS, SKIN_TONES, NPC_COUNT, GANG_ZONES, GANG_NPC_PER_ZONE } from './constants.js';
 import { randomSidewalkPos } from './city.js';
 
+const yieldFrame = () => new Promise(r => requestAnimationFrame(r));
+
 // ── Character Head helper ──────────────────────────────────────────────
 // Returns a group containing the head. Options: hat (bool), sunglasses (bool), skinColor (hex)
 export function createCharacterHead(skinColor, options = {}) {
@@ -141,8 +143,9 @@ export function createPlayer() {
 }
 
 // ── NPCs ──────────────────────────────────────────────────────────────
-export function createNPCs() {
+export async function createNPCs() {
   for (let i = 0; i < NPC_COUNT; i++) {
+    if (i > 0 && i % 10 === 0) await yieldFrame();
     const root = new THREE.Group();
 
     const outfitColor = TROPICAL_OUTFIT_COLORS[Math.floor(Math.random() * TROPICAL_OUTFIT_COLORS.length)];
@@ -254,8 +257,9 @@ function createGangNPC(x, z, gangInfo, gangIndex) {
   };
 }
 
-export function createGangNPCs() {
+export async function createGangNPCs() {
   for (let gi = 0; gi < GANG_ZONES.length; gi++) {
+    if (gi > 0) await yieldFrame();
     const gang = GANG_ZONES[gi];
     for (let i = 0; i < GANG_NPC_PER_ZONE; i++) {
       // Pick random cell from this gang's territory

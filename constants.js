@@ -1,7 +1,8 @@
 // ── Game Constants ──────────────────────────────────────────────────────
+export const WORLD_SCALE = 2;       // scales city geometry vs. player/car size
 export const GRID = 10;
-export const BLOCK = 70;
-export const ROAD = 16;
+export const BLOCK = 70 * WORLD_SCALE;
+export const ROAD = 16 * WORLD_SCALE;
 export const CELL = BLOCK + ROAD;
 export const CITY_SIZE = GRID * CELL;
 export const HALF_CITY = CITY_SIZE / 2;
@@ -40,9 +41,9 @@ export const INDUSTRIAL_COLORS = [0x666655, 0x8B7355, 0x556655, 0x777766, 0x8877
 export const SHOP_SIGN_COLORS = [0xFF1493, 0x00FFFF, 0xFF4500, 0x39FF14, 0xFFD700];
 
 // Ramp constants
-export const RAMP_WIDTH = 6;
-export const RAMP_LENGTH = 12;
-export const RAMP_HEIGHT = 4.5;
+export const RAMP_WIDTH = 6 * WORLD_SCALE;
+export const RAMP_LENGTH = 12 * WORLD_SCALE;
+export const RAMP_HEIGHT = 4.5 * WORLD_SCALE;
 
 export const TROPICAL_OUTFIT_COLORS = [
   0xFF6B6B, 0x4ECDC4, 0xFFE66D, 0xFF8C42, 0x95E1D3,

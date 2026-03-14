@@ -3,7 +3,8 @@ import { scene } from './renderer.js';
 import { state } from './state.js';
 import {
   GRAVITY, PLAYER_SPEED, SPRINT_MULT, JUMP_FORCE,
-  RADIO_STATIONS, HALF_CITY, CAR_BUILDING_DAMAGE_MIN_SPEED, CAR_BUILDING_DAMAGE_MULT
+  RADIO_STATIONS, HALF_CITY, CAR_BUILDING_DAMAGE_MIN_SPEED, CAR_BUILDING_DAMAGE_MULT,
+  WORLD_SCALE
 } from './constants.js';
 import { collideAABB } from './physics.js';
 import { randomSidewalkPos } from './city.js';
@@ -80,7 +81,7 @@ export function updatePlayer(dt) {
   p.x = corrected.x; p.z = corrected.z;
 
   // Drowning in ocean
-  if (p.z > HALF_CITY + 72) {
+  if (p.z > HALF_CITY + 72 * WORLD_SCALE) {
     state.health -= 30 * dt;
   }
 
@@ -238,7 +239,7 @@ export function updateVehicle(dt) {
   }
 
   // Drowning in ocean
-  if (v.z > HALF_CITY + 72) {
+  if (v.z > HALF_CITY + 72 * WORLD_SCALE) {
     state.health -= 30 * dt;
     v.speed *= 0.85; // drag
   }
