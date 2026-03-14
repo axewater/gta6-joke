@@ -20,7 +20,7 @@ export function checkPlayerCarNpcCollision() {
     const dz = npc.z - v.z;
     const dist = Math.sqrt(dx * dx + dz * dz);
 
-    if (dist < 3.2) {
+    if (dist < v.halfW + 1.5) {
       launchNpcRagdoll(npc, carSpeed, v.rotation);
       v.speed *= 0.9;
       state.cameraShake.intensity = 0.8;
@@ -38,7 +38,7 @@ export function checkPlayerCarNpcCollision() {
     const dz = cop.z - v.z;
     const dist = Math.sqrt(dx * dx + dz * dz);
 
-    if (dist < 3.2) {
+    if (dist < v.halfW + 1.5) {
       launchNpcRagdoll(cop, carSpeed, v.rotation);
       v.speed *= 0.9;
       state.cameraShake.intensity = 0.8;
@@ -56,7 +56,7 @@ export function checkPlayerCarNpcCollision() {
     const dz = gnpc.z - v.z;
     const dist = Math.sqrt(dx * dx + dz * dz);
 
-    if (dist < 3.2) {
+    if (dist < v.halfW + 1.5) {
       gnpc.dead = true;
       gnpc.mesh.rotation.x = Math.PI / 2;
       gnpc.respawnTimer = 15;

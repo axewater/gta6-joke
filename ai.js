@@ -67,7 +67,7 @@ export function updateNPCs(dt) {
         const chaseSpeed = npc.speed * 2.5;
         npc.x += (dx / dist) * chaseSpeed * dt;
         npc.z += (dz / dist) * chaseSpeed * dt;
-        const c = collideAABB(npc.x, npc.z, 0.4, 0.3);
+        const c = collideAABB(npc.x, npc.z, 0.2, 0.15);
         npc.x = c.x; npc.z = c.z;
         npc.mesh.rotation.y = Math.atan2(dx, dz);
       } else if (!state.isInVehicle && !state.ragdoll.active) {
@@ -87,7 +87,7 @@ export function updateNPCs(dt) {
         }
       }
 
-      const c = collideAABB(npc.x, npc.z, 0.4, 0.3);
+      const c = collideAABB(npc.x, npc.z, 0.2, 0.15);
       npc.x = c.x; npc.z = c.z;
       npc.mesh.rotation.y = npc.direction;
 
@@ -524,7 +524,7 @@ export function updateGangNPCs(dt) {
         const nx = dx / distToPlayer, nz = dz / distToPlayer;
         gnpc.x += nx * gnpc.speed * dt;
         gnpc.z += nz * gnpc.speed * dt;
-        const c = collideAABB(gnpc.x, gnpc.z, 0.4, 0.3);
+        const c = collideAABB(gnpc.x, gnpc.z, 0.2, 0.15);
         gnpc.x = c.x; gnpc.z = c.z;
         gnpc.mesh.rotation.y = Math.atan2(dx, dz);
       } else if (!state.isInVehicle && !state.ragdoll.active && !state.isDead) {
@@ -565,7 +565,7 @@ export function updateGangNPCs(dt) {
       if (gnpc.z < bounds.minZ + 3) { gnpc.z = bounds.minZ + 3; gnpc.patrolDir += Math.PI; }
       if (gnpc.z > bounds.maxZ - 3) { gnpc.z = bounds.maxZ - 3; gnpc.patrolDir += Math.PI; }
 
-      const c = collideAABB(gnpc.x, gnpc.z, 0.4, 0.3);
+      const c = collideAABB(gnpc.x, gnpc.z, 0.2, 0.15);
       gnpc.x = c.x; gnpc.z = c.z;
       gnpc.mesh.rotation.y = gnpc.patrolDir;
 

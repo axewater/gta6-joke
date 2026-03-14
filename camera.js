@@ -4,7 +4,7 @@ import { state } from './state.js';
 
 export function updateCamera(dt) {
   state.camera.theta -= state.mouse.dx * 0.003;
-  state.camera.phi = Math.max(0.1, Math.min(1.2, state.camera.phi + state.mouse.dy * 0.003));
+  state.camera.phi = Math.max(0.1, Math.min(1.4, state.camera.phi + state.mouse.dy * 0.003));
 
   const target = state.isInVehicle
     ? new THREE.Vector3(state.currentVehicle.x, 1.5, state.currentVehicle.z)

@@ -188,6 +188,7 @@ export function createDetailedCar(x, z, rotation, color, options = {}) {
     group.add(blueLight);
   }
 
+  group.scale.set(1.5, 1.2, 1.5);
   group.rotation.y = rotation;
   group.position.set(x, 0, z);
   scene.add(group);
@@ -198,7 +199,7 @@ export function createDetailedCar(x, z, rotation, color, options = {}) {
     speed: 0,
     wheels,
     color,
-    halfW: 1.3, halfD: 2.5,
+    halfW: 1.95, halfD: 3.75,
     redLight, blueLight, redMat, blueMat,
     flashTimer: 0,
     waypointDist: 0,
@@ -409,6 +410,7 @@ export function createSportsCar(x, z, rotation, color = 0xFF0000, options = {}) 
     wheels.push(wGroup);
   }
 
+  group.scale.set(1.75, 1.75, 1.75);
   group.rotation.y = rotation;
   group.position.set(x, 0, z);
   scene.add(group);
@@ -419,7 +421,7 @@ export function createSportsCar(x, z, rotation, color = 0xFF0000, options = {}) 
     speed: 0,
     wheels,
     color,
-    halfW: 1.6, halfD: 2.6,
+    halfW: 2.8, halfD: 4.55,
     redLight: null, blueLight: null, redMat: null, blueMat: null,
     flashTimer: 0,
     waypointDist: 0,
@@ -574,6 +576,7 @@ export function createSchoolBus(x, z, rotation, options = {}) {
     wheels.push(wGroup);
   }
 
+  group.scale.set(1.5, 1.5, 1.5);
   group.rotation.y = rotation;
   group.position.set(x, 0, z);
   scene.add(group);
@@ -584,7 +587,7 @@ export function createSchoolBus(x, z, rotation, options = {}) {
     speed: 0,
     wheels,
     color: busColor,
-    halfW: 1.5, halfD: 4.2,
+    halfW: 2.25, halfD: 6.3,
     redLight: null, blueLight: null, redMat: null, blueMat: null,
     flashTimer: 0,
     waypointDist: 0,
@@ -751,6 +754,7 @@ export function createTank(x, z) {
   barrel.position.set(0, 0, 1.5);
   turretGroup.add(barrel);
 
+  group.scale.set(1.5, 1.5, 1.5);
   group.position.set(x, 0, z);
   scene.add(group);
 
@@ -759,7 +763,7 @@ export function createTank(x, z) {
     turretGroup,
     x, z,
     rotation: Math.random() * Math.PI * 2,
-    halfW: 2.2, halfD: 3.2,
+    halfW: 3.3, halfD: 4.8,
     shootTimer: 4 + Math.random() * 2,
     shells: []
   };

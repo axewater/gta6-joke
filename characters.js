@@ -128,6 +128,7 @@ export function createPlayer() {
   headGroup.position.set(0, 2.15, 0);
   root.add(headGroup);
 
+  root.scale.set(0.5, 0.625, 0.5);
   root.position.set(0, 0, 0);
   scene.add(root);
 
@@ -182,6 +183,7 @@ export async function createNPCs() {
     }
 
     nz = Math.min(nz, HALF_CITY - 2);
+    root.scale.set(0.5, 0.625, 0.5);
     root.position.set(nx, 0, nz);
     root.rotation.y = dir;
     scene.add(root);
@@ -236,6 +238,7 @@ function createGangNPC(x, z, gangInfo, gangIndex) {
   gun.position.set(0.55, 1.1, 0.3);
   root.add(gun);
 
+  root.scale.set(0.5, 0.625, 0.5);
   root.position.set(x, 0, z);
   scene.add(root);
 
@@ -289,6 +292,7 @@ export function createPoliceOfficer(x, z) {
   gun.position.set(0.55, 1.1, 0.3);
   root.add(gun);
 
+  root.scale.set(0.5, 0.625, 0.5);
   root.position.set(x, 0, z);
   scene.add(root);
 

@@ -77,7 +77,7 @@ export function updatePlayer(dt) {
   p.y += state.playerVelocityY * dt;
   if (p.y < 0) { p.y = 0; state.playerVelocityY = 0; }
 
-  const corrected = collideAABB(p.x, p.z, 0.5, 0.3);
+  const corrected = collideAABB(p.x, p.z, 0.25, 0.15);
   p.x = corrected.x; p.z = corrected.z;
 
   // Drowning in ocean
@@ -304,7 +304,7 @@ export function handleVehicleToggle() {
     state.currentVehicle = null;
     state.camera.distance = 10;
   } else {
-    let nearest = null, nearestDist = 4, isCarjack = false;
+    let nearest = null, nearestDist = 5.5, isCarjack = false;
 
     for (const v of state.vehicles) {
       if (v.isExploded) continue;

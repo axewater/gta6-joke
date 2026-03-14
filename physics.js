@@ -100,7 +100,7 @@ export function checkVehiclePlayerCollision() {
     const dx = px - car.x;
     const dz = pz - car.z;
     const dist = Math.sqrt(dx * dx + dz * dz);
-    if (dist < 3.2) {
+    if (dist < car.halfW + 1.5) {
       const speed = Math.abs(car.speed);
       if (speed < 2) continue; // too slow to matter
 
