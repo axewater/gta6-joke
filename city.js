@@ -153,7 +153,7 @@ export async function createCity() {
   state.puddleMaterial = puddleMat;
   const sidewalkMat = new THREE.MeshStandardMaterial({ color: 0xccbbaa, roughness: 0.7 });
   const yellowMat = new THREE.MeshStandardMaterial({ color: 0xddcc00, roughness: 0.5 });
-  const whiteMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5 });
+  const whiteMat = new THREE.MeshStandardMaterial({ color: 0xcccccc, roughness: 0.8 });
 
   // Horizontal roads
   for (let i = 0; i <= GRID; i++) {

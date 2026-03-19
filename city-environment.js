@@ -16,7 +16,7 @@ export function setupLighting() {
   const sun = new THREE.DirectionalLight(0xFFD4A0, 1.5);
   sun.position.set(150 * S, 60 * S, 80 * S);
   sun.castShadow = true;
-  sun.shadow.mapSize.set(2048, 2048);
+  sun.shadow.mapSize.set(4096, 4096);
   sun.shadow.camera.left = -150 * S;
   sun.shadow.camera.right = 150 * S;
   sun.shadow.camera.top = 150 * S;

@@ -6,7 +6,7 @@
 <title>GTA VI</title>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
-html, body { overflow: hidden; background: #000; width: 100%; height: 100%; }
+html, body { overflow: hidden; background: #000; width: 100%; height: 100%; touch-action: manipulation; }
 canvas#gameCanvas { display: block; }
 
 #hud {
@@ -96,6 +96,30 @@ canvas#gameCanvas { display: block; }
   transition: opacity 1s;
 }
 
+/* Touch controls */
+#touch-joystick-zone {
+  position: fixed; left: 0; top: 0; width: 40%; height: 100%;
+  z-index: 11; display: none;
+}
+#touch-buttons {
+  position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+  pointer-events: none; z-index: 12; display: none;
+}
+.touch-btn {
+  position: absolute; width: 64px; height: 64px; border-radius: 50%;
+  background: rgba(255,255,255,0.15); border: 2px solid rgba(255,255,255,0.4);
+  color: rgba(255,255,255,0.8); font-size: 22px;
+  display: flex; align-items: center; justify-content: center;
+  pointer-events: auto; touch-action: manipulation;
+  user-select: none; -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+.touch-btn:active { background: rgba(255,255,255,0.35); }
+#touch-btn-shoot { bottom: 40px; right: 30px; width: 72px; height: 72px; font-size: 28px; }
+#touch-btn-jump { bottom: 130px; right: 100px; }
+#touch-btn-vehicle { bottom: 210px; right: 40px; }
+#touch-btn-buy { bottom: 40px; right: 120px; display: none; }
+
 #click-overlay {
   position: fixed; top: 0; left: 0; width: 100%; height: 100%;
   background: rgba(0,0,0,0.85); z-index: 20;
@@ -184,8 +208,17 @@ canvas#gameCanvas { display: block; }
   </div>
 </div>
 
+<div id="touch-joystick-zone"></div>
+<div id="touch-buttons">
+  <button class="touch-btn" id="touch-btn-shoot">&#9994;</button>
+  <button class="touch-btn" id="touch-btn-jump">&#11014;</button>
+  <button class="touch-btn" id="touch-btn-vehicle">&#128663;</button>
+  <button class="touch-btn" id="touch-btn-buy">$</button>
+</div>
+
 <div id="wasted-overlay"><span>WASTED</span></div>
 
+<script src="https://cdn.jsdelivr.net/npm/nipplejs@0.10.2/dist/nipplejs.min.js"></script>
 <script type="module" src="main.js"></script>
 </body>
 </html>

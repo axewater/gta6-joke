@@ -13,6 +13,28 @@ const glassMat = new THREE.MeshStandardMaterial({
 const rubberMat = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.9 });
 const rimMat = new THREE.MeshStandardMaterial({ color: 0xaaaaaa, roughness: 0.2, metalness: 0.9 });
 
+// ── ExtrudeGeometry body profile helper ──────────────────────────────
+// Takes a 2D [z,y] point array (side silhouette), extrudes to `width`.
+function createBodyProfile(profilePoints, width, material) {
+  const shape = new THREE.Shape();
+  shape.moveTo(profilePoints[0][0], profilePoints[0][1]);
+  for (let i = 1; i < profilePoints.length; i++) {
+    shape.lineTo(profilePoints[i][0], profilePoints[i][1]);
+  }
+  shape.lineTo(profilePoints[0][0], profilePoints[0][1]);
+  const extrudeSettings = { depth: width, bevelEnabled: false };
+  const geo = new THREE.ExtrudeGeometry(shape, extrudeSettings);
+  // Center the extrusion on X axis
+  geo.translate(0, 0, -width / 2);
+  // Rotate so the Z profile axis maps to Three.js Z (forward), extrude axis to X
+  // The shape is drawn in the XY plane of the geometry, extruded along Z.
+  // We drew [z,y] points so X=forward(z), Y=up. Extrude goes along Z=width which we want as X.
+  // Rotate -90 deg around Y to swap: geo-X→world-Z, geo-Z→world-X
+  geo.rotateY(-Math.PI / 2);
+  const mesh = new THREE.Mesh(geo, material);
+  return mesh;
+}
+
 // ── createDetailedCar ──────────────────────────────────────────────────
 // Replaces createVehicle / createTrafficCar / createPoliceCar
 // options: { isPolice, castShadow }
@@ -22,21 +44,26 @@ export function createDetailedCar(x, z, rotation, color, options = {}) {
 
   const bodyMat = new THREE.MeshStandardMaterial({ color, roughness: 0.3, metalness: 0.6 });
 
-  // ── Main body ──────────────────────────────────────────────────────
-  const body = new THREE.Mesh(new THREE.BoxGeometry(2.2, 1, 4.5), bodyMat);
-  body.position.y = 0.7;
-  body.castShadow = cs;
-  group.add(body);
-
-  // Hood panel
-  const hood = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.06, 1.2), bodyMat);
-  hood.position.set(0, 1.23, 1.5);
-  group.add(hood);
-
-  // Trunk panel
-  const trunk = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.06, 0.8), bodyMat);
-  trunk.position.set(0, 1.23, -1.6);
-  group.add(trunk);
+  // ── Extruded body profile (side silhouette) ──────────────────────────
+  // Points are [z, y] where z is front-to-back, y is up
+  // Front bumper → sloped hood → windshield → roof → rear window → trunk → rear bumper
+  const sedanProfile = [
+    [2.25, 0.2],   // front bumper bottom
+    [2.25, 0.55],  // front bumper top
+    [2.1, 0.65],   // front grille top
+    [1.2, 1.05],   // hood rises (sloped)
+    [0.7, 1.55],   // windshield base
+    [0.1, 1.95],   // windshield top (~25deg from vertical)
+    [-0.9, 1.95],  // roof flat
+    [-1.2, 1.65],  // rear window top
+    [-1.6, 1.25],  // rear window bottom / trunk start
+    [-2.0, 1.15],  // trunk slope
+    [-2.25, 0.9],  // trunk end
+    [-2.25, 0.2],  // rear bumper bottom
+  ];
+  const bodyMesh = createBodyProfile(sedanProfile, 2.2, bodyMat);
+  bodyMesh.castShadow = cs;
+  group.add(bodyMesh);
 
   // Front bumper
   const fBumper = new THREE.Mesh(new THREE.BoxGeometry(2.3, 0.3, 0.2), chromeMat);
@@ -50,15 +77,6 @@ export function createDetailedCar(x, z, rotation, color, options = {}) {
   rBumper.name = 'rBumper';
   group.add(rBumper);
 
-  // Door line strips (left & right)
-  const doorMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.8 });
-  const doorLine = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.6, 2.6), doorMat);
-  doorLine.position.set(-1.12, 0.9, -0.2);
-  group.add(doorLine);
-  const doorLineR = doorLine.clone();
-  doorLineR.position.x = 1.12;
-  group.add(doorLineR);
-
   // Door handles
   const handleGeo = new THREE.BoxGeometry(0.05, 0.08, 0.25);
   const lHandle = new THREE.Mesh(handleGeo, chromeMat);
@@ -68,39 +86,34 @@ export function createDetailedCar(x, z, rotation, color, options = {}) {
   rHandle.position.set(1.14, 1.0, -0.1);
   group.add(rHandle);
 
-  // ── Cabin ─────────────────────────────────────────────────────────
-  const cabin = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.75, 2.1), bodyMat);
-  cabin.position.set(0, 1.58, -0.25);
-  group.add(cabin);
-
   // Windshield (slight tilt simulated by scaling)
-  const windshield = new THREE.Mesh(new THREE.BoxGeometry(1.75, 0.7, 0.08), glassMat);
-  windshield.position.set(0, 1.58, 0.83);
-  windshield.rotation.x = 0.2;
+  const windshield = new THREE.Mesh(new THREE.BoxGeometry(1.75, 0.8, 0.08), glassMat);
+  windshield.position.set(0, 1.75, 0.85);
+  windshield.rotation.x = 0.45;
   group.add(windshield);
 
   // Rear window
   const rearWin = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.6, 0.08), glassMat);
-  rearWin.position.set(0, 1.55, -1.31);
-  rearWin.rotation.x = -0.15;
+  rearWin.position.set(0, 1.5, -1.35);
+  rearWin.rotation.x = -0.3;
   group.add(rearWin);
 
   // Side windows
-  const sideWinGeo = new THREE.BoxGeometry(0.07, 0.45, 1.1);
+  const sideWinGeo = new THREE.BoxGeometry(0.07, 0.5, 1.3);
   const lWin = new THREE.Mesh(sideWinGeo, glassMat);
-  lWin.position.set(-0.96, 1.6, -0.25);
+  lWin.position.set(-0.96, 1.75, -0.1);
   group.add(lWin);
   const rWin = new THREE.Mesh(sideWinGeo, glassMat);
-  rWin.position.set(0.96, 1.6, -0.25);
+  rWin.position.set(0.96, 1.75, -0.1);
   group.add(rWin);
 
   // ── Roof details ──────────────────────────────────────────────────
   const rackGeo = new THREE.BoxGeometry(1.8, 0.05, 0.08);
   const rack1 = new THREE.Mesh(rackGeo, chromeMat);
-  rack1.position.set(0, 2.0, 0.3);
+  rack1.position.set(0, 2.0, 0.0);
   group.add(rack1);
   const rack2 = rack1.clone();
-  rack2.position.z = -0.7;
+  rack2.position.set(0, 2.0, -0.6);
   group.add(rack2);
 
   // Antenna
@@ -229,13 +242,26 @@ export function createSportsCar(x, z, rotation, color = 0xFF0000, options = {}) 
   const carbonMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.4, metalness: 0.3 });
   const stripeMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3, metalness: 0.5 });
 
-  // ── Ultra-low wide body — noticeably flatter than normal car ─────
-  const body = new THREE.Mesh(new THREE.BoxGeometry(2.8, 0.55, 4.8), bodyMat);
-  body.position.y = 0.42;
-  body.castShadow = cs;
-  group.add(body);
+  // ── Ultra-aggressive extruded profile ──────────────────────────────
+  const sportsProfile = [
+    [2.4, 0.15],   // front splitter
+    [2.4, 0.35],   // front lip
+    [2.2, 0.45],   // nose
+    [1.5, 0.55],   // long sloping hood
+    [0.5, 0.7],    // windshield base (very low)
+    [0.0, 1.1],    // windshield top (~55deg rake)
+    [-0.5, 1.15],  // short roof
+    [-0.8, 1.0],   // rear window top
+    [-1.2, 0.75],  // near-flat rear deck
+    [-2.0, 0.65],  // tail
+    [-2.4, 0.55],  // diffuser top
+    [-2.4, 0.15],  // diffuser bottom
+  ];
+  const bodyMesh = createBodyProfile(sportsProfile, 2.8, bodyMat);
+  bodyMesh.castShadow = cs;
+  group.add(bodyMesh);
 
-  // Wide fender flares (left & right) — makes it visually wider
+  // Wide fender flares (left & right)
   const fenderGeo = new THREE.BoxGeometry(0.2, 0.45, 3.6);
   const fenderL = new THREE.Mesh(fenderGeo, bodyMat);
   fenderL.position.set(-1.5, 0.42, 0.2);
@@ -247,16 +273,12 @@ export function createSportsCar(x, z, rotation, color = 0xFF0000, options = {}) 
   // Racing stripes (two white lines down the center)
   const stripeGeo = new THREE.BoxGeometry(0.15, 0.02, 4.6);
   const stripe1 = new THREE.Mesh(stripeGeo, stripeMat);
-  stripe1.position.set(-0.2, 0.71, 0);
+  stripe1.position.set(-0.2, 0.58, 0);
   group.add(stripe1);
   const stripe2 = new THREE.Mesh(stripeGeo, stripeMat);
-  stripe2.position.set(0.2, 0.71, 0);
+  stripe2.position.set(0.2, 0.58, 0);
   group.add(stripe2);
 
-  // Hood — long, very flat with hood scoop
-  const hood = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.04, 2.0), bodyMat);
-  hood.position.set(0, 0.72, 1.1);
-  group.add(hood);
   // Hood scoop
   const scoop = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.15, 0.5), carbonMat);
   scoop.position.set(0, 0.8, 1.5);
@@ -283,15 +305,6 @@ export function createSportsCar(x, z, rotation, color = 0xFF0000, options = {}) 
   intakeR.position.x = 1.42;
   group.add(intakeR);
 
-  // Side skirts (carbon)
-  const skirtGeo = new THREE.BoxGeometry(0.1, 0.12, 3.8);
-  const skirtL = new THREE.Mesh(skirtGeo, carbonMat);
-  skirtL.position.set(-1.42, 0.2, 0);
-  group.add(skirtL);
-  const skirtR = skirtL.clone();
-  skirtR.position.x = 1.42;
-  group.add(skirtR);
-
   // ── Very low cabin — almost flush with body ─────────────────────
   const cabin = new THREE.Mesh(new THREE.BoxGeometry(2.3, 0.4, 1.4), bodyMat);
   cabin.position.set(0, 0.92, -0.4);
@@ -299,8 +312,8 @@ export function createSportsCar(x, z, rotation, color = 0xFF0000, options = {}) 
 
   // Heavily raked windshield
   const windshield = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.45, 0.08), glassMat);
-  windshield.position.set(0, 0.92, 0.4);
-  windshield.rotation.x = 0.45;
+  windshield.position.set(0, 0.9, 0.35);
+  windshield.rotation.x = 0.55;
   group.add(windshield);
 
   // Rear window — very small
@@ -477,6 +490,7 @@ export function createSchoolBus(x, z, rotation, options = {}) {
   // Flat front face
   const frontFace = new THREE.Mesh(new THREE.BoxGeometry(2.7, 1.6, 0.1), bodyMat);
   frontFace.position.set(0, 1.2, 4.0);
+  frontFace.rotation.x = 0.08;
   group.add(frontFace);
 
   // Large front windshield
@@ -508,10 +522,57 @@ export function createSchoolBus(x, z, rotation, options = {}) {
   stripeR.position.x = 1.43;
   group.add(stripeR);
 
-  // STOP sign arm (left side)
-  const stopArm = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.5, 0.05), new THREE.MeshStandardMaterial({ color: 0xFF0000, roughness: 0.5 }));
-  stopArm.position.set(-1.8, 1.6, 2.5);
-  group.add(stopArm);
+  // STOP sign arm (left side) — proper octagon
+  const stopArmMount = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.08, 0.08),
+    new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.8 }));
+  stopArmMount.position.set(-1.7, 1.6, 2.5);
+  group.add(stopArmMount);
+
+  const octShape = new THREE.Shape();
+  const octR = 0.25;
+  for (let i = 0; i < 8; i++) {
+    const a = (Math.PI / 8) + (i * Math.PI / 4);
+    const px = Math.cos(a) * octR;
+    const py = Math.sin(a) * octR;
+    if (i === 0) octShape.moveTo(px, py);
+    else octShape.lineTo(px, py);
+  }
+  octShape.closePath();
+  const stopGeo = new THREE.ExtrudeGeometry(octShape, { depth: 0.04, bevelEnabled: false });
+  stopGeo.translate(0, 0, -0.02);
+  stopGeo.rotateY(Math.PI / 2);
+  const stopMat = new THREE.MeshStandardMaterial({ color: 0xFF0000, roughness: 0.5 });
+  const stopSign = new THREE.Mesh(stopGeo, stopMat);
+  stopSign.position.set(-2.0, 1.6, 2.5);
+  group.add(stopSign);
+
+  // White border ring on stop sign
+  const borderShape = new THREE.Shape();
+  const borderR = 0.23;
+  for (let i = 0; i < 8; i++) {
+    const a = (Math.PI / 8) + (i * Math.PI / 4);
+    const px = Math.cos(a) * borderR;
+    const py = Math.sin(a) * borderR;
+    if (i === 0) borderShape.moveTo(px, py);
+    else borderShape.lineTo(px, py);
+  }
+  borderShape.closePath();
+  const innerShape = new THREE.Shape();
+  const innerR = 0.19;
+  for (let i = 0; i < 8; i++) {
+    const a = (Math.PI / 8) + (i * Math.PI / 4);
+    const px = Math.cos(a) * innerR;
+    const py = Math.sin(a) * innerR;
+    if (i === 0) innerShape.moveTo(px, py);
+    else innerShape.lineTo(px, py);
+  }
+  borderShape.holes.push(innerShape);
+  const borderGeo = new THREE.ExtrudeGeometry(borderShape, { depth: 0.05, bevelEnabled: false });
+  borderGeo.translate(0, 0, -0.025);
+  borderGeo.rotateY(Math.PI / 2);
+  const borderMesh = new THREE.Mesh(borderGeo, new THREE.MeshStandardMaterial({ color: 0xFFFFFF, roughness: 0.5 }));
+  borderMesh.position.set(-2.01, 1.6, 2.5);
+  group.add(borderMesh);
 
   // Side mirrors
   const mirrorGeo = new THREE.BoxGeometry(0.2, 0.15, 0.15);
@@ -576,7 +637,7 @@ export function createSchoolBus(x, z, rotation, options = {}) {
     wheels.push(wGroup);
   }
 
-  group.scale.set(1.5, 1.5, 1.5);
+  group.scale.set(2.25, 2.25, 2.25);
   group.rotation.y = rotation;
   group.position.set(x, 0, z);
   scene.add(group);
@@ -587,7 +648,7 @@ export function createSchoolBus(x, z, rotation, options = {}) {
     speed: 0,
     wheels,
     color: busColor,
-    halfW: 2.25, halfD: 6.3,
+    halfW: 3.375, halfD: 9.45,
     redLight: null, blueLight: null, redMat: null, blueMat: null,
     flashTimer: 0,
     waypointDist: 0,
@@ -725,10 +786,32 @@ export function createTank(x, z) {
   const hullMat = new THREE.MeshStandardMaterial({ color: 0x3a5a1a, roughness: 0.9 });
   const trackMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.95 });
 
-  // Hull
-  const hull = new THREE.Mesh(new THREE.BoxGeometry(4, 1.2, 6), hullMat);
-  hull.position.y = 0.8;
+  // Hull — trapezoidal cross-section (sloped armor)
+  const hullShape = new THREE.Shape();
+  hullShape.moveTo(-3, 0);     // bottom-left
+  hullShape.lineTo(3, 0);      // bottom-right
+  hullShape.lineTo(2.2, 1.2);  // top-right (sloped inward)
+  hullShape.lineTo(-2.2, 1.2); // top-left (sloped inward)
+  hullShape.closePath();
+  const hullGeo = new THREE.ExtrudeGeometry(hullShape, { depth: 6, bevelEnabled: false });
+  hullGeo.translate(0, 0, -3); // center on Z
+  const hull = new THREE.Mesh(hullGeo, hullMat);
+  hull.position.y = 0.2;
   group.add(hull);
+
+  // Front glacis plate (angled armor plate)
+  const glacisShape = new THREE.Shape();
+  glacisShape.moveTo(-2.5, 0);
+  glacisShape.lineTo(2.5, 0);
+  glacisShape.lineTo(2, 1);
+  glacisShape.lineTo(-2, 1);
+  glacisShape.closePath();
+  const glacisGeo = new THREE.ExtrudeGeometry(glacisShape, { depth: 0.15, bevelEnabled: false });
+  glacisGeo.translate(0, 0, -0.075);
+  glacisGeo.rotateX(-0.3); // angle forward
+  const glacis = new THREE.Mesh(glacisGeo, hullMat);
+  glacis.position.set(0, 0.2, 3.1);
+  group.add(glacis);
 
   // Tracks (left & right)
   const trackGeo = new THREE.BoxGeometry(0.8, 0.9, 6.2);
@@ -744,7 +827,16 @@ export function createTank(x, z) {
   turretGroup.position.set(0, 1.6, 0);
   group.add(turretGroup);
 
-  const turret = new THREE.Mesh(new THREE.BoxGeometry(2.5, 0.8, 2.5), hullMat);
+  // Tapered turret
+  const turretShape = new THREE.Shape();
+  turretShape.moveTo(-1.25, 0);
+  turretShape.lineTo(1.25, 0);
+  turretShape.lineTo(1.0, 0.8);
+  turretShape.lineTo(-1.0, 0.8);
+  turretShape.closePath();
+  const turretGeo = new THREE.ExtrudeGeometry(turretShape, { depth: 2.5, bevelEnabled: false });
+  turretGeo.translate(0, 0, -1.25);
+  const turret = new THREE.Mesh(turretGeo, hullMat);
   turretGroup.add(turret);
 
   // Barrel

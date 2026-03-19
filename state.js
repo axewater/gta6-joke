@@ -3,6 +3,7 @@ export const state = {
   player: null,
   vehicles: [],
   buildings: [],
+  isMobile: false,
   keys: {},
   mouse: { dx: 0, dy: 0 },
   camera: { theta: 0, phi: 0.5, distance: 6 },
@@ -63,8 +64,9 @@ export const state = {
   starMaterial: null,
   sunMesh: null,
   moonMesh: null,
-  // Cinematic post-processing
-  cinematicPass: null,
+  // Post-processing passes
+  colorPass: null,
+  smaaPass: null,
   // Ocean shader
   oceanMaterial: null,
   // Rain

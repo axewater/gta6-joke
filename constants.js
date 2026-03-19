@@ -18,8 +18,8 @@ export const CAR_FRICTION = 5;
 export const CAR_TURN = 2.5;
 export const RAGDOLL_KILL_SPEED = 15;
 
-export const BLOOM_STRENGTH_DAY = 0.5;
-export const BLOOM_STRENGTH_NIGHT = 1.6;
+export const BLOOM_STRENGTH_DAY = 0.35;
+export const BLOOM_STRENGTH_NIGHT = 1.2;
 
 export const BUILDING_COLORS = [
   0xFFB6C1, 0x40E0D0, 0xFFFDD0, 0xFF7F50, 0x98FF98,

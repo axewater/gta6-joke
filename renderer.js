@@ -3,20 +3,20 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import { SMAAPass } from 'three/addons/postprocessing/SMAAPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { state } from './state.js';
 import { WORLD_SCALE } from './constants.js';
 
 export let renderer, scene, camera, composer;
 
-// ── Cinematic Post-Processing Shader ────────────────────────────────────
-const CinematicShader = {
+// ── Clean Color Correction Shader ───────────────────────────────────────
+const ColorCorrectionShader = {
   uniforms: {
     tDiffuse: { value: null },
-    time: { value: 0 },
-    grainIntensity: { value: 0.03 },
-    vignetteStrength: { value: 0.45 },
-    resolution: { value: new THREE.Vector2(window.innerWidth, window.innerHeight) }
+    contrast: { value: 1.08 },
+    saturation: { value: 1.15 },
+    brightness: { value: 1.02 },
   },
   vertexShader: `
     varying vec2 vUv;
@@ -27,45 +27,25 @@ const CinematicShader = {
   `,
   fragmentShader: `
     uniform sampler2D tDiffuse;
-    uniform float time;
-    uniform float grainIntensity;
-    uniform float vignetteStrength;
-    uniform vec2 resolution;
+    uniform float contrast;
+    uniform float saturation;
+    uniform float brightness;
     varying vec2 vUv;
 
-    float hash(vec2 p) {
-      vec3 p3 = fract(vec3(p.xyx) * 0.1031);
-      p3 += dot(p3, p3.yzx + 33.33);
-      return fract((p3.x + p3.y) * p3.z);
-    }
-
     void main() {
-      vec2 uv = vUv;
+      vec3 color = texture2D(tDiffuse, vUv).rgb;
 
-      // Chromatic aberration
-      float aberration = 2.0 / resolution.x;
-      float r = texture2D(tDiffuse, uv + vec2(aberration, 0.0)).r;
-      float g = texture2D(tDiffuse, uv).g;
-      float b = texture2D(tDiffuse, uv - vec2(aberration, 0.0)).b;
-      vec3 color = vec3(r, g, b);
+      // Brightness
+      color *= brightness;
 
-      // Teal-orange color grading
+      // Contrast (pivot around mid-gray)
+      color = (color - 0.5) * contrast + 0.5;
+
+      // Saturation
       float lum = dot(color, vec3(0.299, 0.587, 0.114));
-      vec3 graded = mix(color, color * vec3(0.7, 0.9, 1.0), (1.0 - lum) * 0.3);
-      graded = mix(graded, graded * vec3(1.1, 1.0, 0.85), lum * 0.3);
-      color = graded;
+      color = mix(vec3(lum), color, saturation);
 
-      // Film grain
-      float grain = hash(uv * resolution + fract(time) * 100.0) - 0.5;
-      color += grain * grainIntensity;
-
-      // Vignette
-      vec2 center = uv - 0.5;
-      float dist = length(center);
-      float vignette = smoothstep(0.4, 1.2, dist) * vignetteStrength;
-      color *= 1.0 - vignette;
-
-      gl_FragColor = vec4(color, 1.0);
+      gl_FragColor = vec4(clamp(color, 0.0, 1.0), 1.0);
     }
   `
 };
@@ -118,38 +98,44 @@ function createEnvMap() {
 
 // ── Init ────────────────────────────────────────────────────────────────
 export function initRenderer() {
-  renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.4;
+  renderer.toneMappingExposure = 1.3;
   document.body.prepend(renderer.domElement);
   renderer.domElement.id = 'gameCanvas';
 
   scene = new THREE.Scene();
-  scene.fog = new THREE.Fog(0xFFA062, 200 * WORLD_SCALE, 500 * WORLD_SCALE);
+  scene.fog = new THREE.FogExp2(0xFFA062, 0.0008 / WORLD_SCALE);
 
-  camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.5, 600 * WORLD_SCALE);
+  camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.5, 800 * WORLD_SCALE);
 
   // Environment cube map for PBR reflections
   createEnvMap();
 
-  // Post-processing chain: Render → Bloom → Cinematic → Output
+  // Post-processing chain: Render → Bloom → SMAA → Color Correction → Output
   composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene, camera));
 
   const bloomPass = new UnrealBloomPass(
     new THREE.Vector2(window.innerWidth, window.innerHeight),
-    0.9, 0.4, 0.65
+    0.6, 0.5, 0.75
   );
   state.bloomPass = bloomPass;
   composer.addPass(bloomPass);
 
-  const cinematicPass = new ShaderPass(CinematicShader);
-  state.cinematicPass = cinematicPass;
-  composer.addPass(cinematicPass);
+  // SMAA anti-aliasing for sharper edges
+  const smaaPass = new SMAAPass(window.innerWidth, window.innerHeight);
+  composer.addPass(smaaPass);
+  state.smaaPass = smaaPass;
+
+  // Clean color correction (contrast + saturation, no film effects)
+  const colorPass = new ShaderPass(ColorCorrectionShader);
+  state.colorPass = colorPass;
+  composer.addPass(colorPass);
 
   composer.addPass(new OutputPass());
 
@@ -158,8 +144,8 @@ export function initRenderer() {
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
     composer.setSize(window.innerWidth, window.innerHeight);
-    if (state.cinematicPass) {
-      state.cinematicPass.uniforms.resolution.value.set(window.innerWidth, window.innerHeight);
+    if (state.smaaPass) {
+      state.smaaPass.setSize(window.innerWidth, window.innerHeight);
     }
   });
 }

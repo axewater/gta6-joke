@@ -78,3 +78,9 @@ export const missilePool = new MeshPool(
     new THREE.MeshStandardMaterial({ color: 0xff2200, emissive: 0xff1100, emissiveIntensity: 1.0 })
   ), 8
 );
+
+const idleSmokeMat = new THREE.MeshBasicMaterial({ color: 0xcccccc, transparent: true, opacity: 0.4 });
+const idleSmokeGeo = new THREE.SphereGeometry(0.03, 3, 3);
+export const idleSmokePool = new MeshPool(
+  () => new THREE.Mesh(idleSmokeGeo, idleSmokeMat.clone()), 20
+);

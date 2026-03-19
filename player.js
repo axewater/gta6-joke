@@ -10,7 +10,7 @@ import { collideAABB } from './physics.js';
 import { randomSidewalkPos } from './city.js';
 import { spawnTrafficCar } from './vehicles.js';
 import { applyVehicleDamage } from './vehicle-damage.js';
-import { playerBulletPool, policeBulletPool, gangBulletPool, tireSmokePool, tankShellPool, missilePool } from './object-pool.js';
+import { playerBulletPool, policeBulletPool, gangBulletPool, tireSmokePool, tankShellPool, missilePool, idleSmokePool } from './object-pool.js';
 
 // ── Crime System ────────────────────────────────────────────────────────
 export function commitCrime() {
@@ -88,21 +88,64 @@ export function updatePlayer(dt) {
 
   p.mesh.position.set(p.x, p.y, p.z);
 
+  const curRotY = len > 0.1 ? Math.atan2(moveX, moveZ) : p.mesh.rotation.y;
   if (len > 0.1) {
-    p.mesh.rotation.y = Math.atan2(moveX, moveZ);
+    p.mesh.rotation.y = curRotY;
   }
 
-  // Leg animation
-  if (len > 0.1) {
+  const isSprinting = sprint > 1;
+  const isMoving = len > 0.1;
+
+  // ── Enhanced walking/running animation ──────────────────────────────
+  if (isMoving) {
+    // Cancel idle
+    cancelIdleAnimation(p);
+
     p.legPhase += dt * speed * 1.5;
-    const swing = Math.sin(p.legPhase) * 0.5;
+    const legAmp = isSprinting ? 0.7 : 0.5;
+    const swing = Math.sin(p.legPhase) * legAmp;
     p.leftLeg.rotation.x = swing;
     p.rightLeg.rotation.x = -swing;
-    p.leftArm.rotation.x = -swing * 0.6;
-    p.rightArm.rotation.x = swing * 0.6;
+    const armAmp = isSprinting ? 0.7 : 0.5;
+    p.leftArm.rotation.x = -swing * (armAmp / legAmp) * 0.6;
+    p.rightArm.rotation.x = swing * (armAmp / legAmp) * 0.6;
+
+    // Arm spread while running
+    const armSpreadZ = isSprinting ? 0.15 : 0.05;
+    p.leftArm.rotation.z = armSpreadZ;
+    p.rightArm.rotation.z = -armSpreadZ;
+
+    // Body bob
+    const bobAmt = isSprinting ? 0.06 : 0.03;
+    p.mesh.position.y = p.y + Math.abs(Math.sin(p.legPhase * 2)) * bobAmt;
+
+    // Sprint forward lean
+    if (p.bodyGroup) {
+      p.bodyGroup.rotation.x = isSprinting ? 0.12 : 0;
+    }
+
+    // Torso lean on turns
+    if (p.bodyGroup) {
+      if (p.prevRotY === undefined) p.prevRotY = curRotY;
+      let rotDelta = curRotY - p.prevRotY;
+      while (rotDelta > Math.PI) rotDelta -= 2 * Math.PI;
+      while (rotDelta < -Math.PI) rotDelta += 2 * Math.PI;
+      const targetLean = -Math.max(-0.15, Math.min(0.15, rotDelta * 3));
+      p.bodyGroup.rotation.z += (targetLean - p.bodyGroup.rotation.z) * Math.min(1, dt * 8);
+      p.prevRotY = curRotY;
+    }
   } else {
+    // ── Idle animation ────────────────────────────────────────────────
     p.leftLeg.rotation.x = 0; p.rightLeg.rotation.x = 0;
     p.leftArm.rotation.x = 0; p.rightArm.rotation.x = 0;
+    p.leftArm.rotation.z = 0; p.rightArm.rotation.z = 0;
+    if (p.bodyGroup) {
+      p.bodyGroup.rotation.x = 0;
+      p.bodyGroup.rotation.z = 0;
+    }
+    p.mesh.position.y = p.y;
+
+    updateIdleAnimation(p, dt);
   }
 
   // Punch animation
@@ -112,6 +155,259 @@ export function updatePlayer(dt) {
     if (state.punchTimer <= 0) {
       state.isPunching = false;
       p.rightArm.rotation.x = 0;
+    }
+  }
+}
+
+// ── Idle Animation System ──────────────────────────────────────────────
+function cancelIdleAnimation(p) {
+  if (!p.idle) return;
+  const idle = p.idle;
+
+  // Clean up cigarette
+  if (idle.cigMesh) {
+    idle.cigMesh.parent && idle.cigMesh.parent.remove(idle.cigMesh);
+    idle.cigMesh.geometry.dispose();
+    idle.cigMesh = null;
+  }
+  if (idle.cigGlowMesh) {
+    idle.cigGlowMesh.parent && idle.cigGlowMesh.parent.remove(idle.cigGlowMesh);
+    idle.cigGlowMesh.geometry.dispose();
+    idle.cigGlowMesh = null;
+  }
+
+  // Clean up smoke particles
+  for (const sp of idle.smokeParticles) {
+    idleSmokePool.release(sp);
+  }
+  idle.smokeParticles = [];
+
+  // Reset state
+  idle.timer = 0;
+  idle.phase = 'none';
+  idle.smokePhase = 'none';
+  idle.smokeTimer = 0;
+  idle.loopCount = 0;
+  idle.breathPhase = 0;
+  idle.weightPhase = 0;
+  idle.headLookTimer = 0;
+
+  // Reset body rotations
+  p.mesh.rotation.z = 0;
+  if (p.bodyGroup) {
+    p.bodyGroup.scale.y = 1;
+    p.bodyGroup.rotation.z = 0;
+  }
+  if (p.neckPivot) {
+    p.neckPivot.rotation.y = 0;
+    p.neckPivot.rotation.x = 0;
+  }
+}
+
+function updateIdleAnimation(p, dt) {
+  if (!p.idle) return;
+  const idle = p.idle;
+  idle.timer += dt;
+
+  // ── Layer 1: Breathing + weight shift + head look (always active) ──
+  idle.breathPhase += dt * 1.5 * Math.PI * 2;
+  if (p.bodyGroup) {
+    p.bodyGroup.scale.y = 1 + Math.sin(idle.breathPhase) * 0.015;
+  }
+
+  idle.weightPhase += dt * 0.4;
+  p.mesh.rotation.z = Math.sin(idle.weightPhase) * 0.03;
+
+  // Head look-around
+  idle.headLookTimer -= dt;
+  if (idle.headLookTimer <= 0) {
+    idle.headLookTimer = 2 + Math.random() * 4;
+    idle.headTargetY = (Math.random() - 0.5) * 2.4;
+    idle.headTargetX = Math.random() < 0.2 ? -0.15 : 0;
+  }
+  if (p.neckPivot) {
+    p.neckPivot.rotation.y += (idle.headTargetY - p.neckPivot.rotation.y) * Math.min(1, dt * 2);
+    p.neckPivot.rotation.x += (idle.headTargetX - p.neckPivot.rotation.x) * Math.min(1, dt * 2);
+  }
+
+  // ── Layer 2: Smoking sequence (starts at 15s idle) ─────────────────
+  if (idle.timer < 15) return;
+
+  if (idle.smokePhase === 'none') {
+    idle.smokePhase = 'pullCig';
+    idle.smokeTimer = 0;
+  }
+
+  idle.smokeTimer += dt;
+
+  switch (idle.smokePhase) {
+    case 'pullCig': {
+      // Right arm reaches to pocket, cig spawns at 0.4s
+      const t = Math.min(idle.smokeTimer / 0.8, 1);
+      if (t < 0.5) {
+        p.rightArm.rotation.x = 0.3 * (t / 0.5);
+      } else {
+        p.rightArm.rotation.x = 0.3 * (1 - (t - 0.5) / 0.5);
+      }
+      if (idle.smokeTimer >= 0.4 && !idle.cigMesh && p.rightHand) {
+        const cigGeo = new THREE.CylinderGeometry(0.015, 0.015, 0.2, 4);
+        cigGeo.rotateX(Math.PI / 2);
+        const cigMat = new THREE.MeshStandardMaterial({ color: 0xddccaa, roughness: 0.8 });
+        idle.cigMesh = new THREE.Mesh(cigGeo, cigMat);
+        idle.cigMesh.position.set(0, -0.05, 0.1);
+        p.rightHand.add(idle.cigMesh);
+
+        const glowGeo = new THREE.SphereGeometry(0.02, 4, 4);
+        const glowMat = new THREE.MeshStandardMaterial({
+          color: 0xff4400, emissive: 0xff4400, emissiveIntensity: 1.0
+        });
+        idle.cigGlowMesh = new THREE.Mesh(glowGeo, glowMat);
+        idle.cigGlowMesh.position.set(0, -0.05, 0.2);
+        idle.cigGlowMesh.visible = false;
+        p.rightHand.add(idle.cigGlowMesh);
+      }
+      if (idle.smokeTimer >= 0.8) {
+        idle.smokePhase = 'lightCig';
+        idle.smokeTimer = 0;
+      }
+      break;
+    }
+
+    case 'lightCig': {
+      // Left arm cups lighter, right brings cig to mouth
+      const t = Math.min(idle.smokeTimer / 1.2, 1);
+      p.leftArm.rotation.x = -0.8 * t;
+      p.leftArm.rotation.z = 0.3 * t;
+      p.rightArm.rotation.x = -1.2 * t;
+
+      if (idle.smokeTimer >= 0.3 && idle.cigGlowMesh) {
+        idle.cigGlowMesh.visible = true;
+        const glowProgress = (idle.smokeTimer - 0.3) / 0.9;
+        idle.cigGlowMesh.material.emissiveIntensity = 3.0 - glowProgress * 2.0;
+      }
+      if (idle.smokeTimer >= 1.2) {
+        p.leftArm.rotation.x = 0;
+        p.leftArm.rotation.z = 0;
+        idle.smokePhase = 'smoking';
+        idle.smokeTimer = 0;
+        idle.loopCount = 0;
+        idle.maxLoops = 3 + Math.floor(Math.random() * 3);
+        idle.pauseDuration = 1 + Math.random();
+      }
+      break;
+    }
+
+    case 'smoking': {
+      // Loop 3-5x, each cycle 4-6s: drag (1.5s) → exhale (2s) → pause (1-2s)
+      const maxLoops = idle.maxLoops || 4;
+      const cycleTime = idle.smokeTimer;
+
+      if (cycleTime < 1.5) {
+        // Drag — raise cig to mouth, brighten ember
+        const t = cycleTime / 1.5;
+        p.rightArm.rotation.x = -1.2 * t;
+        if (idle.cigGlowMesh) {
+          idle.cigGlowMesh.material.emissiveIntensity = 1.0 + t * 1.5;
+        }
+      } else if (cycleTime < 3.5) {
+        // Exhale — arm lowers, spawn smoke
+        const t = (cycleTime - 1.5) / 2.0;
+        p.rightArm.rotation.x = -1.2 * (1 - t);
+        if (idle.cigGlowMesh) {
+          idle.cigGlowMesh.material.emissiveIntensity = 1.0;
+        }
+
+        // Spawn smoke particles (staggered)
+        if (t < 0.5 && p.neckPivot) {
+          const spawnInterval = 0.08;
+          const spawnCount = Math.floor(t / (spawnInterval / 2.0));
+          while (idle.smokeParticles.length < Math.min(spawnCount, 8)) {
+            const sp = idleSmokePool.acquire();
+            if (!sp) break;
+            // Position at mouth
+            const worldPos = new THREE.Vector3();
+            p.neckPivot.getWorldPosition(worldPos);
+            worldPos.y -= 0.1;
+            worldPos.z += 0.2;
+            sp.position.copy(worldPos);
+            sp.scale.set(0.5, 0.5, 0.5);
+            sp.material.opacity = 0.4;
+            sp.userData = {
+              vx: (Math.random() - 0.5) * 0.3,
+              vy: 0.3 + Math.random() * 0.3,
+              vz: (Math.random() - 0.5) * 0.3,
+              life: 1.5
+            };
+            idle.smokeParticles.push(sp);
+          }
+        }
+      } else {
+        // Pause
+        p.rightArm.rotation.x = 0;
+        const pauseDuration = idle.pauseDuration || 1.5;
+        if (cycleTime >= 3.5 + pauseDuration) {
+          idle.smokeTimer = 0;
+          idle.pauseDuration = 1 + Math.random();
+          idle.loopCount++;
+          if (idle.loopCount >= maxLoops) {
+            idle.smokePhase = 'discardCig';
+            idle.smokeTimer = 0;
+          }
+        }
+      }
+      break;
+    }
+
+    case 'discardCig': {
+      // Flick motion + stomp
+      const t = Math.min(idle.smokeTimer / 1.5, 1);
+      if (t < 0.3) {
+        // Flick
+        p.rightArm.rotation.z = -0.5 * (t / 0.3);
+      } else if (t < 0.4 && idle.cigMesh) {
+        // Detach cig
+        if (idle.cigMesh.parent) {
+          idle.cigMesh.parent.remove(idle.cigMesh);
+          idle.cigMesh.geometry.dispose();
+          idle.cigMesh = null;
+        }
+        if (idle.cigGlowMesh && idle.cigGlowMesh.parent) {
+          idle.cigGlowMesh.parent.remove(idle.cigGlowMesh);
+          idle.cigGlowMesh.geometry.dispose();
+          idle.cigGlowMesh = null;
+        }
+        p.rightArm.rotation.z = 0;
+      }
+      if (t > 0.5 && t < 0.8) {
+        // Stomp
+        p.rightLeg.rotation.x = -0.3 * Math.sin((t - 0.5) / 0.3 * Math.PI);
+      }
+      if (idle.smokeTimer >= 1.5) {
+        p.rightArm.rotation.z = 0;
+        p.rightLeg.rotation.x = 0;
+        idle.smokePhase = 'none';
+        idle.smokeTimer = 0;
+        idle.timer = 0; // restart full idle cycle
+      }
+      break;
+    }
+  }
+
+  // Update existing smoke particles
+  for (let i = idle.smokeParticles.length - 1; i >= 0; i--) {
+    const sp = idle.smokeParticles[i];
+    const ud = sp.userData;
+    sp.position.x += ud.vx * dt;
+    sp.position.y += ud.vy * dt;
+    sp.position.z += ud.vz * dt;
+    ud.vx += (Math.random() - 0.5) * 0.5 * dt; // wander
+    ud.life -= dt;
+    const s = sp.scale.x + dt * 0.5;
+    sp.scale.set(s, s, s);
+    sp.material.opacity = Math.max(0, 0.4 * (ud.life / 1.5));
+    if (ud.life <= 0) {
+      idleSmokePool.release(sp);
+      idle.smokeParticles.splice(i, 1);
     }
   }
 }
@@ -487,6 +783,7 @@ export function updateDeath(dt) {
       state.policeKilled = 0;
 
       if (state.isInVehicle) { state.isInVehicle = false; state.currentVehicle = null; }
+      cancelIdleAnimation(state.player);
       state.player.x = 86; state.player.y = 0; state.player.z = 86;
       state.player.mesh.rotation.set(0, 0, 0);
       state.player.mesh.visible = true;

@@ -49,7 +49,7 @@ export function updateHUD() {
     const dx = gs.x - state.player.x, dz = gs.z - state.player.z;
     if (dx * dx + dz * dz < 25) {
       document.getElementById('weapon').innerHTML = state.money >= 200
-        ? '&#128176; Press F to buy PISTOL ($200)'
+        ? (state.isMobile ? '&#128176; Tap $ to buy PISTOL ($200)' : '&#128176; Press F to buy PISTOL ($200)')
         : '&#128176; PISTOL — $200 (not enough money)';
     }
   }

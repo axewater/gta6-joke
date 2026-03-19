@@ -19,6 +19,7 @@ import { finalizeStaticMeshes } from './geometry-merger.js';
 import { SpatialGrid } from './spatial-grid.js';
 import { playerBulletPool, policeBulletPool, gangBulletPool, tireSmokePool, tankShellPool, missilePool } from './object-pool.js';
 import { registerSystem, runSystems, playerBulletSystem, policeBulletSystem, gangBulletSystem, tankShellSystem, missileSystem, tireSmokeSystem } from './systems.js';
+import { initTouchControls, updateTouchControls } from './touch-controls.js';
 
 let clock;
 
@@ -135,6 +136,10 @@ async function init() {
   // Wire up triggerRagdoll for vehicle-damage.js (avoids circular import)
   setTriggerRagdoll(triggerRagdoll);
 
+  // Mobile detection
+  state.isMobile = (('ontouchstart' in window) || (navigator.maxTouchPoints > 0))
+    && window.matchMedia('(pointer: coarse)').matches;
+
   // Input
   document.addEventListener('keydown', e => { state.keys[e.code] = true; });
   document.addEventListener('keyup', e => { state.keys[e.code] = false; });
@@ -172,22 +177,31 @@ async function init() {
 
   // Switch from loading screen to "Click to Play"
   document.getElementById('loading-container').style.display = 'none';
-  document.getElementById('play-text').style.display = '';
 
-  // Pointer lock
-  const overlay = document.getElementById('click-overlay');
-  overlay.addEventListener('click', () => {
-    document.querySelector('#gameCanvas').requestPointerLock();
-  });
-  document.addEventListener('pointerlockchange', () => {
-    overlay.style.display = document.pointerLockElement ? 'none' : 'flex';
-  });
-
-  // Fade controls hint
-  setTimeout(() => {
+  if (state.isMobile) {
+    // On mobile: skip pointer lock, hide overlay, init touch controls
+    document.getElementById('click-overlay').style.display = 'none';
     const hint = document.getElementById('controls-hint');
-    if (hint) hint.style.opacity = '0';
-  }, 5000);
+    if (hint) hint.style.display = 'none';
+    initTouchControls();
+  } else {
+    document.getElementById('play-text').style.display = '';
+
+    // Pointer lock
+    const overlay = document.getElementById('click-overlay');
+    overlay.addEventListener('click', () => {
+      document.querySelector('#gameCanvas').requestPointerLock();
+    });
+    document.addEventListener('pointerlockchange', () => {
+      overlay.style.display = document.pointerLockElement ? 'none' : 'flex';
+    });
+
+    // Fade controls hint
+    setTimeout(() => {
+      const hint = document.getElementById('controls-hint');
+      if (hint) hint.style.opacity = '0';
+    }, 5000);
+  }
 
   // ── Register all systems ──────────────────────────────────────────────
   // Priority 0: Player movement
@@ -217,11 +231,12 @@ async function init() {
   registerSystem('dayNight', (dt) => updateDayNight(dt));
   registerSystem('clouds', (dt) => updateClouds(dt));
 
-  // Priority 3: AI systems (every 2 frames)
-  registerSystem('npcAI', (dt) => updateNPCs(dt), 2);
-  registerSystem('trafficAI', (dt) => updateTrafficCars(dt), 2);
-  registerSystem('trafficLights', (dt) => updateTrafficLights(dt), 2);
-  registerSystem('gangAI', (dt) => updateGangNPCs(dt), 2);
+  // Priority 3: AI systems (every 2 frames on desktop, every frame on mobile to avoid stutter)
+  const aiInterval = state.isMobile ? 1 : 2;
+  registerSystem('npcAI', (dt) => updateNPCs(dt), aiInterval);
+  registerSystem('trafficAI', (dt) => updateTrafficCars(dt), aiInterval);
+  registerSystem('trafficLights', (dt) => updateTrafficLights(dt), aiInterval);
+  registerSystem('gangAI', (dt) => updateGangNPCs(dt), aiInterval);
   registerSystem('spatialGrid', () => {
     if (state.spatialGrid) {
       for (const npc of state.npcs) {
@@ -257,6 +272,11 @@ async function init() {
   // Priority 7: HUD
   registerSystem('hud', () => updateHUD());
   registerSystem('minimap', () => updateMinimap(), 3);
+
+  // Priority 8: Touch controls (mobile only)
+  if (state.isMobile) {
+    registerSystem('touchControls', () => updateTouchControls());
+  }
 
   gameLoop();
 }

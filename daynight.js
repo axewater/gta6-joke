@@ -44,6 +44,12 @@ export function updateDayNight(dt) {
 
   const isNight = (t < 0.2 || t > 0.8);
 
+  // ── Fog density — thicker at night, clearer during day ──────────────
+  const fogDayDensity = 0.0004;
+  const fogNightDensity = 0.0007;
+  const fogTarget = isNight ? fogNightDensity : fogDayDensity;
+  scene.fog.density += (fogTarget - scene.fog.density) * dt * 2;
+
   // ── Sky Dome ──────────────────────────────────────────────────────────
   if (state.skyDomeMaterial) {
     state.skyDomeMaterial.uniforms.horizonColor.value.copy(skyColor);
@@ -106,15 +112,17 @@ export function updateDayNight(dt) {
     state.envCubeTexture.needsUpdate = true;
   }
 
-  // ── Cinematic Pass ────────────────────────────────────────────────────
-  if (state.cinematicPass) {
-    state.cinematicPass.uniforms.time.value = state.elapsedTime;
-    const grainTarget = isNight ? 0.06 : 0.03;
-    const vignetteTarget = isNight ? 0.6 : 0.4;
-    state.cinematicPass.uniforms.grainIntensity.value +=
-      (grainTarget - state.cinematicPass.uniforms.grainIntensity.value) * dt * 2;
-    state.cinematicPass.uniforms.vignetteStrength.value +=
-      (vignetteTarget - state.cinematicPass.uniforms.vignetteStrength.value) * dt * 2;
+  // ── Color Correction Pass ────────────────────────────────────────────
+  if (state.colorPass) {
+    // Night: slightly more contrast and less saturation for moody feel
+    // Day: vibrant saturated look
+    const contrastTarget = isNight ? 1.12 : 1.08;
+    const satTarget = isNight ? 1.05 : 1.18;
+    const brightTarget = isNight ? 0.95 : 1.02;
+    const u = state.colorPass.uniforms;
+    u.contrast.value += (contrastTarget - u.contrast.value) * dt * 2;
+    u.saturation.value += (satTarget - u.saturation.value) * dt * 2;
+    u.brightness.value += (brightTarget - u.brightness.value) * dt * 2;
   }
 
   // ── Ocean Water ───────────────────────────────────────────────────────
