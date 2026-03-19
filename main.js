@@ -20,6 +20,7 @@ import { SpatialGrid } from './spatial-grid.js';
 import { playerBulletPool, policeBulletPool, gangBulletPool, tireSmokePool, tankShellPool, missilePool } from './object-pool.js';
 import { registerSystem, runSystems, playerBulletSystem, policeBulletSystem, gangBulletSystem, tankShellSystem, missileSystem, tireSmokeSystem } from './systems.js';
 import { initTouchControls, updateTouchControls } from './touch-controls.js';
+import { createGroundCover, updateGrassCulling } from './city-ground.js';
 
 let clock;
 
@@ -41,6 +42,7 @@ async function init() {
     { fn: createOceanAndBeach, label: 'Creating ocean...' },
     { fn: createMountains, label: 'Building mountains...' },
     { fn: createPalmTrees, label: 'Planting trees...' },
+    { fn: createGroundCover, label: 'Growing ground cover...' },
     { fn: createClouds, label: 'Generating clouds...' },
     { fn: createSkyDome, label: 'Building sky...' },
     { fn: createRain, label: 'Setting up weather...' },
@@ -237,6 +239,7 @@ async function init() {
   registerSystem('trafficAI', (dt) => updateTrafficCars(dt), aiInterval);
   registerSystem('trafficLights', (dt) => updateTrafficLights(dt), aiInterval);
   registerSystem('gangAI', (dt) => updateGangNPCs(dt), aiInterval);
+  registerSystem('grassCulling', () => updateGrassCulling(), 3);
   registerSystem('spatialGrid', () => {
     if (state.spatialGrid) {
       for (const npc of state.npcs) {

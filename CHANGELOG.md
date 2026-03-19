@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.9.0] - 2026-03-19
+
+### Added
+- District-aware procedural ground texture with per-district color palettes and noise detail
+- Grass tufts system with chunked InstancedMesh and distance culling
+- Rocks, pebbles, and flower clusters in residential and park districts
+- Sidewalk weeds along road edges
+- Industrial ground detail with dirt patches, gravel, and oil stain decals
+- Garden beds with flowers in residential blocks
+
+### Changed
+- Ground material now uses canvas-generated texture instead of flat color
+
 ## [0.8.0] - 2026-03-19
 
 ### Added

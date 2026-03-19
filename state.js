@@ -95,4 +95,5 @@ export const state = {
   bulbMat: null,
   spatialGrid: null,
   mergedMeshes: [],
+  grassInstances: [],
 };

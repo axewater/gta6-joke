@@ -17,6 +17,7 @@ import { createWarehouse, createParkingGarage, createParkingLot, createPark } fr
 import { setupLighting, createOceanAndBeach, createPalmTrees, createClouds, createSkyDome, createMountains } from './city-environment.js';
 import { createTrafficLights, updateTrafficLights } from './city-traffic.js';
 import { createMoneyPickups, createGunStore } from './city-pickups.js';
+import { createGroundTexture } from './city-ground.js';
 
 const yieldFrame = () => new Promise(r => requestAnimationFrame(r));
 
@@ -135,9 +136,9 @@ export function createRamps() {
 // ── Main createCity ─────────────────────────────────────────────────────
 
 export async function createCity() {
-  // Ground
+  // Ground — district-aware procedural texture
   const groundGeo = new THREE.PlaneGeometry(CITY_SIZE + 100, CITY_SIZE + 100);
-  const groundMat = new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.9 });
+  const groundMat = createGroundTexture();
   const ground = new THREE.Mesh(groundGeo, groundMat);
   ground.rotation.x = -Math.PI / 2;
   ground.receiveShadow = true;
