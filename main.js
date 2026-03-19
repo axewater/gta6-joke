@@ -21,6 +21,7 @@ import { playerBulletPool, policeBulletPool, gangBulletPool, tireSmokePool, tank
 import { registerSystem, runSystems, playerBulletSystem, policeBulletSystem, gangBulletSystem, tankShellSystem, missileSystem, tireSmokeSystem } from './systems.js';
 import { initTouchControls, updateTouchControls } from './touch-controls.js';
 import { createGroundCover, updateGrassCulling } from './city-ground.js';
+import { updateElevators } from './city-buildings-downtown.js';
 
 let clock;
 
@@ -232,6 +233,7 @@ async function init() {
   registerSystem('moneyPickups', (dt) => updateMoneyPickups(dt));
   registerSystem('dayNight', (dt) => updateDayNight(dt));
   registerSystem('clouds', (dt) => updateClouds(dt));
+  registerSystem('elevators', (dt) => updateElevators(dt));
 
   // Priority 3: AI systems (every 2 frames on desktop, every frame on mobile to avoid stutter)
   const aiInterval = state.isMobile ? 1 : 2;

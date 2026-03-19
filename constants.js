@@ -51,6 +51,7 @@ export const TROPICAL_OUTFIT_COLORS = [
 ];
 
 export const SKIN_TONES = [0xDEB887, 0xC68642, 0x8D5524, 0xFFDBB4, 0xF1C27D];
+export const NPC_HAIR_COLORS = [0x1a1a1a, 0x4a3728, 0x8a7040, 0xc4a875, 0x2c1b0e, 0x6b3a2a];
 
 // Vehicle collision constants
 export const VEH_MAX_HEALTH = 100;

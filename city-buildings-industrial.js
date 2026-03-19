@@ -170,7 +170,7 @@ export function createPark(blockCenterX, blockCenterZ) {
   scene.add(path3);
   registerStaticMesh(path3, pathMat);
 
-  // Trees — mix of palm and deciduous
+  // Trees — mix of palm and deciduous with multi-blob canopies
   const treeCount = 6 + Math.floor(Math.random() * 5);
   for (let t = 0; t < treeCount; t++) {
     const tx = blockCenterX + (Math.random() - 0.5) * (BLOCK * 0.8);
@@ -179,25 +179,92 @@ export function createPark(blockCenterX, blockCenterZ) {
 
     if (Math.random() < 0.4) {
       // Palm tree
-      const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.35, 6, 8), trunkMat);
-      trunk.position.y = 3;
+      const trunkH = 6;
+      const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.35, trunkH, 8), trunkMat);
+      trunk.position.y = trunkH / 2;
       group.add(trunk);
       registerStaticMesh(trunk, trunkMat);
-      const canopy = new THREE.Mesh(new THREE.SphereGeometry(2.5, 8, 6), palmCanopyMat);
-      canopy.position.y = 6.5;
-      canopy.scale.set(1, 0.5, 1);
-      group.add(canopy);
-      registerStaticMesh(canopy, palmCanopyMat);
+
+      // Multi-blob canopy: main sphere + 2-3 smaller offset spheres
+      const mainCanopy = new THREE.Mesh(new THREE.SphereGeometry(2.0, 8, 6), palmCanopyMat);
+      mainCanopy.position.y = trunkH + 0.5;
+      mainCanopy.scale.set(1, 0.5, 1);
+      group.add(mainCanopy);
+      registerStaticMesh(mainCanopy, palmCanopyMat);
+
+      const palmBlobCount = 2 + Math.floor(Math.random() * 2); // 2-3
+      for (let i = 0; i < palmBlobCount; i++) {
+        const r = 1.2 + Math.random() * 0.6;
+        const blob = new THREE.Mesh(new THREE.SphereGeometry(r, 8, 6), palmCanopyMat);
+        blob.position.set(
+          (Math.random() - 0.5) * 3.0,
+          trunkH + 0.5 + (Math.random() - 0.5) * 0.6,
+          (Math.random() - 0.5) * 3.0
+        );
+        blob.scale.set(1, 0.4 + Math.random() * 0.3, 1);
+        group.add(blob);
+        registerStaticMesh(blob, palmCanopyMat);
+      }
+
+      // Random branches
+      const palmBranchCount = 2 + Math.floor(Math.random() * 3);
+      for (let i = 0; i < palmBranchCount; i++) {
+        const bRadius = 0.06 + Math.random() * 0.04;
+        const bLength = 1.0 + Math.random() * 1.5;
+        const branch = new THREE.Mesh(new THREE.CylinderGeometry(bRadius, bRadius, bLength, 6), trunkMat);
+        const bHeight = trunkH * (0.4 + Math.random() * 0.4);
+        branch.position.y = bHeight;
+        const tiltAngle = (30 + Math.random() * 40) * Math.PI / 180;
+        const dirAngle = Math.random() * Math.PI * 2;
+        branch.rotation.z = Math.cos(dirAngle) * tiltAngle;
+        branch.rotation.x = Math.sin(dirAngle) * tiltAngle;
+        branch.rotation.y = dirAngle;
+        group.add(branch);
+        registerStaticMesh(branch, trunkMat);
+      }
     } else {
-      // Deciduous tree (sphere canopy + thicker trunk)
-      const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.4, 5, 8), trunkMat);
-      trunk.position.y = 2.5;
+      // Deciduous tree (multi-blob canopy + thicker trunk)
+      const trunkH = 5;
+      const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.4, trunkH, 8), trunkMat);
+      trunk.position.y = trunkH / 2;
       group.add(trunk);
       registerStaticMesh(trunk, trunkMat);
-      const canopy = new THREE.Mesh(new THREE.SphereGeometry(3, 8, 8), decidCanopyMat);
-      canopy.position.y = 6;
-      group.add(canopy);
-      registerStaticMesh(canopy, decidCanopyMat);
+
+      // Multi-blob canopy: main sphere + 2-4 smaller offset spheres
+      const mainCanopy = new THREE.Mesh(new THREE.SphereGeometry(2.5, 8, 8), decidCanopyMat);
+      mainCanopy.position.y = trunkH + 1.0;
+      group.add(mainCanopy);
+      registerStaticMesh(mainCanopy, decidCanopyMat);
+
+      const decidBlobCount = 2 + Math.floor(Math.random() * 3); // 2-4
+      for (let i = 0; i < decidBlobCount; i++) {
+        const r = 1.5 + Math.random() * 0.5;
+        const blob = new THREE.Mesh(new THREE.SphereGeometry(r, 8, 8), decidCanopyMat);
+        blob.position.set(
+          (Math.random() - 0.5) * 4.0,   // ±2.0 x
+          trunkH + 1.0 + (Math.random() - 0.5) * 1.0, // ±0.5 y
+          (Math.random() - 0.5) * 4.0    // ±2.0 z
+        );
+        group.add(blob);
+        registerStaticMesh(blob, decidCanopyMat);
+      }
+
+      // Random branches
+      const decidBranchCount = 2 + Math.floor(Math.random() * 3);
+      for (let i = 0; i < decidBranchCount; i++) {
+        const bRadius = 0.06 + Math.random() * 0.04;
+        const bLength = 1.0 + Math.random() * 1.5;
+        const branch = new THREE.Mesh(new THREE.CylinderGeometry(bRadius, bRadius, bLength, 6), trunkMat);
+        const bHeight = trunkH * (0.4 + Math.random() * 0.4);
+        branch.position.y = bHeight;
+        const tiltAngle = (30 + Math.random() * 40) * Math.PI / 180;
+        const dirAngle = Math.random() * Math.PI * 2;
+        branch.rotation.z = Math.cos(dirAngle) * tiltAngle;
+        branch.rotation.x = Math.sin(dirAngle) * tiltAngle;
+        branch.rotation.y = dirAngle;
+        group.add(branch);
+        registerStaticMesh(branch, trunkMat);
+      }
     }
     group.rotation.x = (Math.random() - 0.5) * 0.05;
     group.rotation.z = (Math.random() - 0.5) * 0.05;

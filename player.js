@@ -139,6 +139,7 @@ export function updatePlayer(dt) {
     p.leftLeg.rotation.x = 0; p.rightLeg.rotation.x = 0;
     p.leftArm.rotation.x = 0; p.rightArm.rotation.x = 0;
     p.leftArm.rotation.z = 0; p.rightArm.rotation.z = 0;
+    if (p.rightForearm) p.rightForearm.rotation.x = 0;
     if (p.bodyGroup) {
       p.bodyGroup.rotation.x = 0;
       p.bodyGroup.rotation.z = 0;
@@ -246,8 +247,10 @@ function updateIdleAnimation(p, dt) {
       const t = Math.min(idle.smokeTimer / 0.8, 1);
       if (t < 0.5) {
         p.rightArm.rotation.x = 0.3 * (t / 0.5);
+        if (p.rightForearm) p.rightForearm.rotation.x = -0.4 * (t / 0.5);
       } else {
         p.rightArm.rotation.x = 0.3 * (1 - (t - 0.5) / 0.5);
+        if (p.rightForearm) p.rightForearm.rotation.x = -0.4 * (1 - (t - 0.5) / 0.5);
       }
       if (idle.smokeTimer >= 0.4 && !idle.cigMesh && p.rightHand) {
         const cigGeo = new THREE.CylinderGeometry(0.015, 0.015, 0.2, 4);
@@ -274,11 +277,12 @@ function updateIdleAnimation(p, dt) {
     }
 
     case 'lightCig': {
-      // Left arm cups lighter, right brings cig to mouth
+      // Left arm cups lighter, right brings cig to mouth with elbow bend
       const t = Math.min(idle.smokeTimer / 1.2, 1);
       p.leftArm.rotation.x = -0.8 * t;
       p.leftArm.rotation.z = 0.3 * t;
       p.rightArm.rotation.x = -1.2 * t;
+      if (p.rightForearm) p.rightForearm.rotation.x = -1.5 * t;
 
       if (idle.smokeTimer >= 0.3 && idle.cigGlowMesh) {
         idle.cigGlowMesh.visible = true;
@@ -303,16 +307,18 @@ function updateIdleAnimation(p, dt) {
       const cycleTime = idle.smokeTimer;
 
       if (cycleTime < 1.5) {
-        // Drag — raise cig to mouth, brighten ember
+        // Drag — raise cig to mouth with elbow bend, brighten ember
         const t = cycleTime / 1.5;
         p.rightArm.rotation.x = -1.2 * t;
+        if (p.rightForearm) p.rightForearm.rotation.x = -1.5 * t;
         if (idle.cigGlowMesh) {
           idle.cigGlowMesh.material.emissiveIntensity = 1.0 + t * 1.5;
         }
       } else if (cycleTime < 3.5) {
-        // Exhale — arm lowers, spawn smoke
+        // Exhale — arm lowers, elbow straightens, spawn smoke
         const t = (cycleTime - 1.5) / 2.0;
         p.rightArm.rotation.x = -1.2 * (1 - t);
+        if (p.rightForearm) p.rightForearm.rotation.x = -1.5 * (1 - t);
         if (idle.cigGlowMesh) {
           idle.cigGlowMesh.material.emissiveIntensity = 1.0;
         }
@@ -344,6 +350,7 @@ function updateIdleAnimation(p, dt) {
       } else {
         // Pause
         p.rightArm.rotation.x = 0;
+        if (p.rightForearm) p.rightForearm.rotation.x = 0;
         const pauseDuration = idle.pauseDuration || 1.5;
         if (cycleTime >= 3.5 + pauseDuration) {
           idle.smokeTimer = 0;
@@ -377,6 +384,7 @@ function updateIdleAnimation(p, dt) {
           idle.cigGlowMesh = null;
         }
         p.rightArm.rotation.z = 0;
+        if (p.rightForearm) p.rightForearm.rotation.x = 0;
       }
       if (t > 0.5 && t < 0.8) {
         // Stomp
@@ -384,6 +392,7 @@ function updateIdleAnimation(p, dt) {
       }
       if (idle.smokeTimer >= 1.5) {
         p.rightArm.rotation.z = 0;
+        if (p.rightForearm) p.rightForearm.rotation.x = 0;
         p.rightLeg.rotation.x = 0;
         idle.smokePhase = 'none';
         idle.smokeTimer = 0;

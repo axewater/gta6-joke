@@ -43,9 +43,10 @@ export function updateNPCs(dt) {
           state.restaurantSeats[npc.seatIndex].occupied = false;
         }
         npc.seatIndex = -1;
-        // Stop leg animation
+        // Stop leg/arm animation
         npc.leftLeg.rotation.x = 0;
         npc.rightLeg.rotation.x = 0;
+        if (npc.leftArm) { npc.leftArm.rotation.x = 0; npc.rightArm.rotation.x = 0; }
       }
       continue;
     }
@@ -111,6 +112,7 @@ export function updateNPCs(dt) {
             npc.mesh.rotation.y = Math.atan2(seat.tableX - seat.x, seat.tableZ - seat.z);
             npc.leftLeg.rotation.x = -0.8; // sitting pose
             npc.rightLeg.rotation.x = -0.8;
+            if (npc.leftArm) { npc.leftArm.rotation.x = 0; npc.rightArm.rotation.x = 0; }
             break;
           }
         }
@@ -132,6 +134,10 @@ export function updateNPCs(dt) {
     const swing = Math.sin(npc.legPhase) * 0.4;
     npc.leftLeg.rotation.x = swing;
     npc.rightLeg.rotation.x = -swing;
+    if (npc.leftArm) {
+      npc.leftArm.rotation.x = -swing * 0.6;
+      npc.rightArm.rotation.x = swing * 0.6;
+    }
   }
 }
 
@@ -411,9 +417,14 @@ export function updatePoliceOfficers(dt) {
       const swing = Math.sin(cop.legPhase) * 0.4;
       cop.leftLeg.rotation.x = swing;
       cop.rightLeg.rotation.x = -swing;
+      if (cop.leftArm) {
+        cop.leftArm.rotation.x = -swing * 0.6;
+        cop.rightArm.rotation.x = swing * 0.6;
+      }
     } else {
       cop.leftLeg.rotation.x = 0;
       cop.rightLeg.rotation.x = 0;
+      if (cop.leftArm) { cop.leftArm.rotation.x = 0; cop.rightArm.rotation.x = 0; }
       if (!state.isInVehicle && !state.ragdoll.active) {
         state.health -= 10 * dt;
       }
@@ -582,11 +593,15 @@ export function updateGangNPCs(dt) {
     gnpc.z = Math.min(gnpc.z, HALF_CITY - 2);
     gnpc.mesh.position.set(gnpc.x, 0, gnpc.z);
 
-    // Leg animation
+    // Leg + arm animation
     gnpc.legPhase += dt * gnpc.speed * 2;
     const swing = Math.sin(gnpc.legPhase) * 0.4;
     gnpc.leftLeg.rotation.x = swing;
     gnpc.rightLeg.rotation.x = -swing;
+    if (gnpc.leftArm) {
+      gnpc.leftArm.rotation.x = -swing * 0.6;
+      gnpc.rightArm.rotation.x = swing * 0.6;
+    }
   }
 }
 

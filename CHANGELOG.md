@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.10.0] - 2026-03-20
+
+### Added
+- NPC sphere heads with hair, sphere eyes, and proper facial features matching player quality
+- NPC cylinder limbs with joint pivots and extruded trapezoid torsos
+- NPC arm counter-swing animation while walking (regular NPCs, gang, police)
+- NPC shadow casting enabled on all character meshes
+- Multi-blob tree canopies (3-5 overlapping spheres) replacing single-sphere blobs
+- Random branches sticking out of tree trunks for visual variety
+- Doors on all buildings with 3 random styles: dark rectangle, framed with awning, glass entrance
+- Exterior elevator shafts on ~28% of downtown skyscrapers with animated elevator cars
+- Building ground landscaping: concrete pads, planter boxes with bushes, benches, lamp posts, trash cans
+- NPC hair color variety (6 hair colors: black, dark brown, sandy, blonde, auburn)
+- Player smoking elbow bend animation for realistic cigarette-to-mouth motion
+- Hair color palette constant (NPC_HAIR_COLORS)
+
+### Changed
+- Window texture scale doubled for more realistic window sizing
+- Player pants color from dark navy (0x1a1a66) to medium blue jeans (0x3355aa)
+- Player neck cylinder extended to bridge torso-to-head gap
+- Gang NPC guns now attached to right hand (animate with arm swing)
+- Police officer guns now attached to right hand
+- Gang NPC bandana position adjusted for sphere heads
+- Park trees upgraded with multi-blob canopies and branches (palm + deciduous)
+
 ## [0.9.0] - 2026-03-19
 
 ### Added

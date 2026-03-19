@@ -15,6 +15,15 @@ import { registerStaticMesh } from './geometry-merger.js';
 const dummy = new THREE.Object3D();
 const _color = new THREE.Color();
 
+// ── Building landscaping materials (shared for geometry merging) ─────
+const concreteMat = new THREE.MeshStandardMaterial({ color: 0x999999, roughness: 0.85 });
+const planterMat = new THREE.MeshStandardMaterial({ color: 0x8B4513, roughness: 0.9 });
+const bushMat = new THREE.MeshStandardMaterial({ color: 0x338833, roughness: 0.85 });
+const benchWoodMat = new THREE.MeshStandardMaterial({ color: 0x8B4513, roughness: 0.9 });
+const lampPoleMat = new THREE.MeshStandardMaterial({ color: 0x555555, metalness: 0.6, roughness: 0.4 });
+const lampHeadMat = new THREE.MeshStandardMaterial({ color: 0xFFDD88, emissive: 0xFFDD88, emissiveIntensity: 0.5, roughness: 0.5 });
+const trashCanMat = new THREE.MeshStandardMaterial({ color: 0x336633, roughness: 0.8 });
+
 /** True when (px, pz) sits on any road grid-line (within ROAD/2). */
 function isOnRoad(px, pz) {
   for (let i = 0; i <= GRID; i++) {
@@ -594,7 +603,208 @@ function createGravelAndIndustrial() {
   }
 }
 
-// ── 7. Distance Culling ────────────────────────────────────────────────
+// ── 7. Building Landscaping ─────────────────────────────────────────────
+
+function createBuildingLandscaping() {
+  // Shared geometries (low poly for performance)
+  const padGeoCache = {};  // keyed by "w_h" to reuse PlaneGeometry sizes
+  const planterBoxGeo = new THREE.BoxGeometry(2.0, 0.8, 1.5);
+  const bushGeo = new THREE.SphereGeometry(0.4, 6, 6);
+  const benchSeatGeo = new THREE.BoxGeometry(2.0, 0.15, 0.8);
+  const benchLegGeo = new THREE.BoxGeometry(0.15, 0.45, 0.6);
+  const benchBackGeo = new THREE.BoxGeometry(2.0, 0.6, 0.1);
+  const lampPoleGeo = new THREE.CylinderGeometry(0.1, 0.15, 5, 6);
+  const lampHeadGeo = new THREE.BoxGeometry(0.6, 0.3, 0.6);
+  const trashCanGeo = new THREE.CylinderGeometry(0.3, 0.25, 0.8, 6);
+
+  for (let bi = 0; bi < state.buildings.length; bi++) {
+    const b = state.buildings[bi];
+
+    // Skip boundary walls / mountains
+    if (b.height > 500) continue;
+
+    // Skip very small buildings
+    const footprintW = b.maxX - b.minX;
+    const footprintD = b.maxZ - b.minZ;
+    if (footprintW * footprintD < 20) continue;
+
+    // ── Concrete pad ──
+    const padW = footprintW + 6;
+    const padD = footprintD + 6;
+    const padKey = `${padW.toFixed(1)}_${padD.toFixed(1)}`;
+    if (!padGeoCache[padKey]) {
+      padGeoCache[padKey] = new THREE.PlaneGeometry(padW, padD);
+    }
+    const centerX = (b.minX + b.maxX) / 2;
+    const centerZ = (b.minZ + b.maxZ) / 2;
+
+    const pad = new THREE.Mesh(padGeoCache[padKey], concreteMat);
+    pad.rotation.x = -Math.PI / 2;
+    pad.position.set(centerX, 0.03, centerZ);
+    scene.add(pad);
+    registerStaticMesh(pad, concreteMat);
+
+    // Building edges for placing elements
+    const edges = [
+      { x: centerX, z: b.minZ - 2, dir: 'minZ' }, // front (-Z)
+      { x: centerX, z: b.maxZ + 2, dir: 'maxZ' }, // back (+Z)
+      { x: b.minX - 2, z: centerZ, dir: 'minX' }, // left
+      { x: b.maxX + 2, z: centerZ, dir: 'maxX' }, // right
+    ];
+
+    // ── Planter boxes (2-4 per building, 60% chance each) ──
+    const planterCount = 2 + Math.floor(Math.random() * 3); // 2-4
+    for (let p = 0; p < planterCount; p++) {
+      if (Math.random() > 0.6) continue;
+
+      // Pick a random position along building edges
+      const side = Math.floor(Math.random() * 4);
+      let px, pz;
+      if (side === 0) { // -Z face
+        px = b.minX + Math.random() * footprintW;
+        pz = b.minZ - 2;
+      } else if (side === 1) { // +Z face
+        px = b.minX + Math.random() * footprintW;
+        pz = b.maxZ + 2;
+      } else if (side === 2) { // -X face
+        px = b.minX - 2;
+        pz = b.minZ + Math.random() * footprintD;
+      } else { // +X face
+        px = b.maxX + 2;
+        pz = b.minZ + Math.random() * footprintD;
+      }
+
+      if (isOnRoad(px, pz) || isInsideBuilding(px, pz)) continue;
+
+      const planter = new THREE.Mesh(planterBoxGeo, planterMat);
+      planter.position.set(px, 0.4, pz);
+      scene.add(planter);
+      registerStaticMesh(planter, planterMat);
+
+      // 2-3 small bush spheres on top
+      const bushCount = 2 + Math.floor(Math.random() * 2);
+      for (let bsh = 0; bsh < bushCount; bsh++) {
+        const bush = new THREE.Mesh(bushGeo, bushMat);
+        bush.position.set(
+          px + (Math.random() - 0.5) * 1.2,
+          1.0,
+          pz + (Math.random() - 0.5) * 0.8
+        );
+        scene.add(bush);
+        registerStaticMesh(bush, bushMat);
+      }
+    }
+
+    // ── Benches (1-2 per building, 40% chance) ──
+    const benchCount = 1 + Math.floor(Math.random() * 2); // 1-2
+    for (let bn = 0; bn < benchCount; bn++) {
+      if (Math.random() > 0.4) continue;
+
+      const side = Math.floor(Math.random() * 4);
+      let bx, bz, rotY;
+      if (side === 0) { // -Z face
+        bx = b.minX + Math.random() * footprintW;
+        bz = b.minZ - 3;
+        rotY = 0;
+      } else if (side === 1) { // +Z face
+        bx = b.minX + Math.random() * footprintW;
+        bz = b.maxZ + 3;
+        rotY = Math.PI;
+      } else if (side === 2) { // -X face
+        bx = b.minX - 3;
+        bz = b.minZ + Math.random() * footprintD;
+        rotY = Math.PI / 2;
+      } else { // +X face
+        bx = b.maxX + 3;
+        bz = b.minZ + Math.random() * footprintD;
+        rotY = -Math.PI / 2;
+      }
+
+      if (isOnRoad(bx, bz) || isInsideBuilding(bx, bz)) continue;
+
+      // Seat
+      const seat = new THREE.Mesh(benchSeatGeo, benchWoodMat);
+      seat.position.set(bx, 0.45, bz);
+      seat.rotation.y = rotY;
+      scene.add(seat);
+      registerStaticMesh(seat, benchWoodMat);
+
+      // Legs (2 under the seat)
+      for (let legSide = -1; legSide <= 1; legSide += 2) {
+        const leg = new THREE.Mesh(benchLegGeo, benchWoodMat);
+        const offsetX = Math.cos(rotY) * legSide * 0.7;
+        const offsetZ = Math.sin(rotY) * legSide * 0.7;
+        leg.position.set(bx + offsetX, 0.225, bz - offsetZ);
+        leg.rotation.y = rotY;
+        scene.add(leg);
+        registerStaticMesh(leg, benchWoodMat);
+      }
+
+      // Back
+      const back = new THREE.Mesh(benchBackGeo, benchWoodMat);
+      const backOffsetX = -Math.sin(rotY) * 0.35;
+      const backOffsetZ = -Math.cos(rotY) * 0.35;
+      back.position.set(bx + backOffsetX, 0.75, bz + backOffsetZ);
+      back.rotation.y = rotY;
+      scene.add(back);
+      registerStaticMesh(back, benchWoodMat);
+    }
+
+    // ── Lamp posts (1-2 per building, 50% chance, only tall buildings) ──
+    if (b.height > 15) {
+      const lampCount = 1 + Math.floor(Math.random() * 2); // 1-2
+      for (let lp = 0; lp < lampCount; lp++) {
+        if (Math.random() > 0.5) continue;
+
+        // Place at building corners, offset 2.5 units
+        const cornerIdx = Math.floor(Math.random() * 4);
+        let lx, lz;
+        if (cornerIdx === 0) {
+          lx = b.minX - 2.5; lz = b.minZ - 2.5;
+        } else if (cornerIdx === 1) {
+          lx = b.maxX + 2.5; lz = b.minZ - 2.5;
+        } else if (cornerIdx === 2) {
+          lx = b.minX - 2.5; lz = b.maxZ + 2.5;
+        } else {
+          lx = b.maxX + 2.5; lz = b.maxZ + 2.5;
+        }
+
+        if (isOnRoad(lx, lz) || isInsideBuilding(lx, lz)) continue;
+
+        // Pole
+        const pole = new THREE.Mesh(lampPoleGeo, lampPoleMat);
+        pole.position.set(lx, 2.5, lz);
+        scene.add(pole);
+        registerStaticMesh(pole, lampPoleMat);
+
+        // Lamp head
+        const head = new THREE.Mesh(lampHeadGeo, lampHeadMat);
+        head.position.set(lx, 5.15, lz);
+        scene.add(head);
+        registerStaticMesh(head, lampHeadMat);
+      }
+    }
+
+    // ── Trash cans (1-2 per building, 30% chance) ──
+    const trashCount = 1 + Math.floor(Math.random() * 2); // 1-2
+    for (let tc = 0; tc < trashCount; tc++) {
+      if (Math.random() > 0.3) continue;
+
+      // Near building front face (+Z), offset 2 units
+      const tx = b.minX + Math.random() * footprintW;
+      const tz = b.maxZ + 2;
+
+      if (isOnRoad(tx, tz) || isInsideBuilding(tx, tz)) continue;
+
+      const can = new THREE.Mesh(trashCanGeo, trashCanMat);
+      can.position.set(tx, 0.4, tz);
+      scene.add(can);
+      registerStaticMesh(can, trashCanMat);
+    }
+  }
+}
+
+// ── 8. Distance Culling ────────────────────────────────────────────────
 
 const GRASS_CULL_DISTANCE = 400;
 
@@ -621,4 +831,5 @@ export function createGroundCover() {
   createFlowersAndGardens();
   createSidewalkWeeds();
   createGravelAndIndustrial();
+  createBuildingLandscaping();
 }

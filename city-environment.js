@@ -153,18 +153,52 @@ export function createPalmTrees() {
     const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.35, trunkH, 8), trunkMat);
     trunk.position.y = trunkH / 2;
     group.add(trunk);
-    const canopy = new THREE.Mesh(new THREE.SphereGeometry(2.5, 8, 6), canopyMat);
-    canopy.position.y = trunkH + 0.5;
-    canopy.scale.set(1, 0.5, 1);
-    group.add(canopy);
+    registerStaticMesh(trunk, trunkMat);
+
+    // Multi-blob canopy: main sphere + 2-3 smaller offset spheres
+    const mainCanopy = new THREE.Mesh(new THREE.SphereGeometry(2.0, 8, 6), canopyMat);
+    mainCanopy.position.y = trunkH + 0.5;
+    mainCanopy.scale.set(1, 0.5, 1);
+    group.add(mainCanopy);
+    registerStaticMesh(mainCanopy, canopyMat);
+
+    const extraCount = 2 + Math.floor(Math.random() * 2); // 2-3 extra blobs
+    for (let i = 0; i < extraCount; i++) {
+      const r = 1.2 + Math.random() * 0.6; // radius 1.2-1.8
+      const blob = new THREE.Mesh(new THREE.SphereGeometry(r, 8, 6), canopyMat);
+      blob.position.set(
+        (Math.random() - 0.5) * 3.0,   // ±1.5 x
+        trunkH + 0.5 + (Math.random() - 0.5) * 0.6, // ±0.3 y from canopy center
+        (Math.random() - 0.5) * 3.0    // ±1.5 z
+      );
+      blob.scale.set(1, 0.4 + Math.random() * 0.3, 1);
+      group.add(blob);
+      registerStaticMesh(blob, canopyMat);
+    }
+
+    // Random branches: 2-4 cylinders sticking out from the trunk
+    const branchCount = 2 + Math.floor(Math.random() * 3); // 2-4 branches
+    for (let i = 0; i < branchCount; i++) {
+      const bRadius = 0.06 + Math.random() * 0.04; // 0.06-0.1
+      const bLength = 1.0 + Math.random() * 1.5;   // 1.0-2.5
+      const branch = new THREE.Mesh(new THREE.CylinderGeometry(bRadius, bRadius, bLength, 6), trunkMat);
+      const bHeight = trunkH * (0.4 + Math.random() * 0.4); // 40-80% of trunk height
+      branch.position.y = bHeight;
+      // Tilt outward 30-70 degrees from vertical
+      const tiltAngle = (30 + Math.random() * 40) * Math.PI / 180;
+      const dirAngle = Math.random() * Math.PI * 2;
+      branch.rotation.z = Math.cos(dirAngle) * tiltAngle;
+      branch.rotation.x = Math.sin(dirAngle) * tiltAngle;
+      branch.rotation.y = dirAngle;
+      group.add(branch);
+      registerStaticMesh(branch, trunkMat);
+    }
 
     group.rotation.x = (Math.random() - 0.5) * 0.1;
     group.rotation.z = (Math.random() - 0.5) * 0.1;
     group.position.set(px, 0, pz);
     scene.add(group);
     state.palmTrees.push(group);
-    registerStaticMesh(trunk, trunkMat);
-    registerStaticMesh(canopy, canopyMat);
     pushAABB(px, pz, 1, 1, trunkH);
   }
 

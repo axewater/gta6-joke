@@ -25,7 +25,7 @@ export function makeWindowTexture(w, h) {
   const tex = new THREE.CanvasTexture(canvas);
   tex.wrapS = THREE.RepeatWrapping;
   tex.wrapT = THREE.RepeatWrapping;
-  tex.repeat.set(w / 10, h / 15);
+  tex.repeat.set(w / 20, h / 30);
   return tex;
 }
 
@@ -71,6 +71,15 @@ function getPooledBuildingMat(color) {
   return buildingMatPool.get(key);
 }
 
+// Door materials (module-scope, shared across all buildings)
+const doorDarkMat = new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.5 });
+const doorFrameMat = new THREE.MeshStandardMaterial({ color: 0x888888, roughness: 0.6 });
+const doorGlassMat = new THREE.MeshStandardMaterial({
+  color: 0x88ccff, emissive: 0x88ccff, emissiveIntensity: 0.3,
+  metalness: 0.5, roughness: 0.2
+});
+const awningColors = [0xcc3333, 0x3366cc, 0x33aa55, 0xccaa33, 0x9933cc];
+
 export function addBuilding(cx, cz, w, h, d, color, useWindows, castSh) {
   const mat = useWindows
     ? new THREE.MeshStandardMaterial({ color, map: makeWindowTexture(w, h), roughness: 0.8 })
@@ -88,6 +97,77 @@ export function addBuilding(cx, cz, w, h, d, color, useWindows, castSh) {
   // Auto-register non-windowed buildings for geometry merging
   if (!useWindows) {
     registerStaticMesh(mesh, mat);
+  }
+
+  // ── Door at ground level on +Z face ──────────────────────────────────
+  if ((useWindows || h > 6) && w >= 4 && d >= 4) {
+    const doorW = Math.min(3.0, w * 0.2);
+    const doorH = Math.min(4.0, h * 0.3);
+    const doorZ = cz + d / 2 + 0.06;
+    const roll = Math.random();
+
+    if (roll < 0.4) {
+      // Style 1: Simple dark rectangle (40%)
+      const doorGeo = new THREE.PlaneGeometry(doorW, doorH);
+      const door = new THREE.Mesh(doorGeo, doorDarkMat);
+      door.position.set(cx, doorH / 2, doorZ);
+      scene.add(door);
+      registerStaticMesh(door, doorDarkMat);
+    } else if (roll < 0.7) {
+      // Style 2: Detailed door with frame + awning (30%)
+      const doorGeo = new THREE.PlaneGeometry(doorW, doorH);
+      const door = new THREE.Mesh(doorGeo, doorDarkMat);
+      door.position.set(cx, doorH / 2, doorZ);
+      scene.add(door);
+      registerStaticMesh(door, doorDarkMat);
+
+      const frameThick = 0.15;
+      // Top frame
+      const topGeo = new THREE.BoxGeometry(doorW + frameThick * 2, frameThick, frameThick);
+      const topFrame = new THREE.Mesh(topGeo, doorFrameMat);
+      topFrame.position.set(cx, doorH + frameThick / 2, doorZ);
+      scene.add(topFrame);
+      registerStaticMesh(topFrame, doorFrameMat);
+
+      // Left frame
+      const sideGeo = new THREE.BoxGeometry(frameThick, doorH, frameThick);
+      const leftFrame = new THREE.Mesh(sideGeo, doorFrameMat);
+      leftFrame.position.set(cx - doorW / 2 - frameThick / 2, doorH / 2, doorZ);
+      scene.add(leftFrame);
+      registerStaticMesh(leftFrame, doorFrameMat);
+
+      // Right frame
+      const rightFrame = new THREE.Mesh(sideGeo, doorFrameMat);
+      rightFrame.position.set(cx + doorW / 2 + frameThick / 2, doorH / 2, doorZ);
+      scene.add(rightFrame);
+      registerStaticMesh(rightFrame, doorFrameMat);
+
+      // Awning/overhang
+      const awningColor = awningColors[Math.floor(Math.random() * awningColors.length)];
+      const awningMat = new THREE.MeshStandardMaterial({ color: awningColor, roughness: 0.7 });
+      const awningGeo = new THREE.BoxGeometry(doorW + 1.5, 0.2, 1.2);
+      const awning = new THREE.Mesh(awningGeo, awningMat);
+      awning.position.set(cx, doorH + 0.5, doorZ + 0.5);
+      scene.add(awning);
+      registerStaticMesh(awning, awningMat);
+    } else {
+      // Style 3: Glass entrance (30%, only for tall buildings)
+      if (h > 15) {
+        const glassDoorW = doorW * 1.3;
+        const doorGeo = new THREE.PlaneGeometry(glassDoorW, doorH);
+        const door = new THREE.Mesh(doorGeo, doorGlassMat);
+        door.position.set(cx, doorH / 2, doorZ);
+        scene.add(door);
+        registerStaticMesh(door, doorGlassMat);
+      } else {
+        // Fallback to simple dark door for short buildings
+        const doorGeo = new THREE.PlaneGeometry(doorW, doorH);
+        const door = new THREE.Mesh(doorGeo, doorDarkMat);
+        door.position.set(cx, doorH / 2, doorZ);
+        scene.add(door);
+        registerStaticMesh(door, doorDarkMat);
+      }
+    }
   }
 
   return mesh;
