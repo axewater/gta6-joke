@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.11.0] - 2026-03-20
+
+### Added
+- Building depth and lighting: per-face color variation (front/side/back shading), vertical gradient ambient occlusion in window textures, and edge/corner highlight strips
+- Times Square area in center downtown (4 blocks) with dense LED ad panels, scrolling news tickers, flashing neon signs, ground-level billboard stands, and permanent police officers
+- Diverse building signage system: LED ad panels (40% of skyscrapers), hotel/business name signs (30%), with canvas-based text rendering
+- Sign texture helpers (makeSignTexture, makeScrollingSignTexture) with text pools for hotels, brands, ads, businesses, and news tickers
+- Scrolling sign UV animation and flashing sign emissive oscillation
+- Destructible traffic lights: tilt on light impact (speed < 10), break and fall on hard impact, with collision AABBs and fall animation
+- Street light tilt-before-break behavior (light hit tilts, hard hit destroys)
+
+### Fixed
+- Tree rendering broken by geometry merger: registerStaticMesh was called before group world position was set, causing all tree geometry to merge at origin instead of correct positions
+
 ## [0.10.0] - 2026-03-20
 
 ### Added

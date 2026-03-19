@@ -3,7 +3,7 @@ import { scene } from './renderer.js';
 import { state } from './state.js';
 import { BLOCK, DOWNTOWN_COLORS } from './constants.js';
 import { S } from './city-constants.js';
-import { pick, clampToBlock, addBuilding, pushAABB, addNeonSign } from './city-helpers.js';
+import { pick, clampToBlock, addBuilding, pushAABB, addNeonSign, makeSignTexture, BRAND_NAMES, AD_TEXTS, HOTEL_NAMES, BUSINESS_NAMES } from './city-helpers.js';
 import { registerStaticMesh } from './geometry-merger.js';
 
 const antennaMat = new THREE.MeshStandardMaterial({ color: 0xAAAAAA, metalness: 0.8, roughness: 0.3 });
@@ -76,6 +76,46 @@ export function createSkyscraper(blockCenterX, blockCenterZ) {
 
     // Neon — 50% chance downtown
     addNeonSign(cx, cz, actualW, actualD, height, bounds, 0.5);
+
+    // ── Diverse building signage ──────────────────────────────────────
+    // Large LED ad panel (40% chance)
+    if (Math.random() < 0.4) {
+      const signTexts = [...BRAND_NAMES, ...AD_TEXTS];
+      const text = signTexts[Math.floor(Math.random() * signTexts.length)];
+      const bgColors = ['#110022', '#001122', '#221100', '#002200', '#220011'];
+      const textColors = ['#ff3366', '#33ffcc', '#ffcc00', '#ff6600', '#cc33ff', '#33ccff'];
+      const bgColor = bgColors[Math.floor(Math.random() * bgColors.length)];
+      const textColor = textColors[Math.floor(Math.random() * textColors.length)];
+      const signTex = makeSignTexture(text, bgColor, textColor);
+      const signW = 4 + Math.random() * 6;
+      const signH = 2 + Math.random() * 3;
+      const signMat = new THREE.MeshStandardMaterial({
+        map: signTex, emissive: 0xffffff, emissiveMap: signTex, emissiveIntensity: 1.5
+      });
+      const signMesh = new THREE.Mesh(new THREE.PlaneGeometry(signW, signH), signMat);
+      const signY = height * (0.4 + Math.random() * 0.35);
+      // Random face
+      const face = Math.floor(Math.random() * 4);
+      if (face === 0) signMesh.position.set(cx, signY, cz + actualD / 2 + 0.15);
+      else if (face === 1) { signMesh.position.set(cx, signY, cz - actualD / 2 - 0.15); signMesh.rotation.y = Math.PI; }
+      else if (face === 2) { signMesh.position.set(cx + actualW / 2 + 0.15, signY, cz); signMesh.rotation.y = Math.PI / 2; }
+      else { signMesh.position.set(cx - actualW / 2 - 0.15, signY, cz); signMesh.rotation.y = -Math.PI / 2; }
+      scene.add(signMesh);
+    }
+
+    // Hotel/business name near top (30% chance)
+    if (Math.random() < 0.3) {
+      const names = [...HOTEL_NAMES, ...BUSINESS_NAMES];
+      const text = names[Math.floor(Math.random() * names.length)];
+      const signTex = makeSignTexture(text, '#000', '#ffffff', 256, 48);
+      const signW = Math.min(actualW * 0.7, 12);
+      const signMat = new THREE.MeshStandardMaterial({
+        map: signTex, emissive: 0xffffff, emissiveMap: signTex, emissiveIntensity: 1.0
+      });
+      const signMesh = new THREE.Mesh(new THREE.PlaneGeometry(signW, 2), signMat);
+      signMesh.position.set(cx, height * 0.9, cz + actualD / 2 + 0.15);
+      scene.add(signMesh);
+    }
 
     // Exterior elevator (28% chance)
     if (Math.random() < 0.28) {

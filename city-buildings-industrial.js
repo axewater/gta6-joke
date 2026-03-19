@@ -176,6 +176,12 @@ export function createPark(blockCenterX, blockCenterZ) {
     const tx = blockCenterX + (Math.random() - 0.5) * (BLOCK * 0.8);
     const tz = blockCenterZ + (Math.random() - 0.5) * (BLOCK * 0.8);
     const group = new THREE.Group();
+    // Set position and add to scene BEFORE registering children
+    // (registerStaticMesh needs correct world matrices)
+    group.rotation.x = (Math.random() - 0.5) * 0.05;
+    group.rotation.z = (Math.random() - 0.5) * 0.05;
+    group.position.set(tx, 0, tz);
+    scene.add(group);
 
     if (Math.random() < 0.4) {
       // Palm tree
@@ -266,10 +272,6 @@ export function createPark(blockCenterX, blockCenterZ) {
         registerStaticMesh(branch, trunkMat);
       }
     }
-    group.rotation.x = (Math.random() - 0.5) * 0.05;
-    group.rotation.z = (Math.random() - 0.5) * 0.05;
-    group.position.set(tx, 0, tz);
-    scene.add(group);
     // Tree trunk collision
     pushAABB(tx, tz, 1, 1, 6);
   }

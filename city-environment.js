@@ -150,6 +150,13 @@ export function createPalmTrees() {
     const trunkH = 6 * heightScale;
 
     const group = new THREE.Group();
+    // Set position and add to scene BEFORE registering children
+    // (registerStaticMesh needs correct world matrices)
+    group.rotation.x = (Math.random() - 0.5) * 0.1;
+    group.rotation.z = (Math.random() - 0.5) * 0.1;
+    group.position.set(px, 0, pz);
+    scene.add(group);
+
     const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.35, trunkH, 8), trunkMat);
     trunk.position.y = trunkH / 2;
     group.add(trunk);
@@ -194,10 +201,6 @@ export function createPalmTrees() {
       registerStaticMesh(branch, trunkMat);
     }
 
-    group.rotation.x = (Math.random() - 0.5) * 0.1;
-    group.rotation.z = (Math.random() - 0.5) * 0.1;
-    group.position.set(px, 0, pz);
-    scene.add(group);
     state.palmTrees.push(group);
     pushAABB(px, pz, 1, 1, trunkH);
   }

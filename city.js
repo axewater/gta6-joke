@@ -18,6 +18,7 @@ import { setupLighting, createOceanAndBeach, createPalmTrees, createClouds, crea
 import { createTrafficLights, updateTrafficLights } from './city-traffic.js';
 import { createMoneyPickups, createGunStore } from './city-pickups.js';
 import { createGroundTexture } from './city-ground.js';
+import { createTimesSquare } from './city-times-square.js';
 
 const yieldFrame = () => new Promise(r => requestAnimationFrame(r));
 
@@ -305,6 +306,9 @@ export async function createCity() {
     }
   }
 
+  // Times Square — dense signage in center downtown blocks
+  await createTimesSquare();
+
   // ── Street lights — 40 at intersections (grouped for destruction) ─────
   const lightPoleMat = new THREE.MeshStandardMaterial({ color: 0x444444 });
   const bulbGeo = new THREE.SphereGeometry(0.3, 8, 8);
@@ -345,7 +349,9 @@ export async function createCity() {
       group, bulb, pointLight: pl,
       x: lx, z: lz,
       aabb,
+      damaged: false,
       destroyed: false,
+      tiltAngle: 0,
       fallTimer: 0,
       fallDirX: 0, fallDirZ: 0
     });

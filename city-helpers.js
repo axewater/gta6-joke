@@ -6,11 +6,13 @@ import { registerStaticMesh } from './geometry-merger.js';
 
 export function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
 
-export function makeWindowTexture(w, h) {
+export function makeWindowTexture(w, h, darkenFactor = 0) {
   const canvas = document.createElement('canvas');
   canvas.width = 64; canvas.height = 128;
   const ctx = canvas.getContext('2d');
-  ctx.fillStyle = '#555';
+  // Base wall color — slightly varied by darkenFactor (0 = normal, 0.15 = side, 0.25 = back)
+  const base = Math.max(0, Math.round(85 - darkenFactor * 255));
+  ctx.fillStyle = `rgb(${base},${base},${base})`;
   ctx.fillRect(0, 0, 64, 128);
   const cols = 4, rows = 8, winW = 10, winH = 10;
   const gapX = (64 - cols * winW) / (cols + 1);
@@ -22,6 +24,18 @@ export function makeWindowTexture(w, h) {
       ctx.fillRect(gapX + c * (winW + gapX), gapY + r * (winH + gapY), winW, winH);
     }
   }
+  // Vertical gradient — darken bottom 40% for ambient occlusion effect
+  const grad = ctx.createLinearGradient(0, 128, 0, 128 * 0.6);
+  grad.addColorStop(0, 'rgba(0,0,0,0.45)');
+  grad.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 128 * 0.6, 64, 128 * 0.4);
+  // Subtle top highlight
+  const topGrad = ctx.createLinearGradient(0, 0, 0, 128 * 0.15);
+  topGrad.addColorStop(0, 'rgba(255,255,255,0.08)');
+  topGrad.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = topGrad;
+  ctx.fillRect(0, 0, 64, 128 * 0.15);
   const tex = new THREE.CanvasTexture(canvas);
   tex.wrapS = THREE.RepeatWrapping;
   tex.wrapT = THREE.RepeatWrapping;
@@ -53,6 +67,59 @@ export function makeGarageTexture(w, h) {
   return tex;
 }
 
+// Sign text pools for city signage
+export const HOTEL_NAMES = ['GRAND HOTEL', 'RITZ', 'PALM PLAZA', 'OCEAN VIEW', 'VICE TOWER', 'ROYALE', 'SUNSET INN', 'THE MARINA'];
+export const BRAND_NAMES = ['SPRUNK', 'eCOLA', 'CLUCKIN BELL', 'BURGER SHOT', 'PISSWASSER', 'REDWOOD', 'WHIZ', 'FACADE'];
+export const AD_TEXTS = ['BUY NOW!', 'SALE 70% OFF', 'OPEN 24/7', 'VIP LOUNGE', 'LIVE TONIGHT', 'FREE WiFi', 'NEW SEASON', 'HOT DEALS'];
+export const BUSINESS_NAMES = ['CASINO', 'BANK OF VICE', 'NEWS 7', 'ELECTRONICS', 'FASHION', 'NIGHTCLUB', 'SPA & GYM', 'INSURANCE'];
+export const TICKER_TEXTS = [
+  'STOCKS UP 420% >>> VICE CITY WEATHER: HOT >>> BREAKING NEWS: BANK ROBBERY IN PROGRESS >>> ',
+  'SPRUNK: THE TASTE OF A NEW GENERATION >>> LIVE CONCERT TONIGHT >>> TRAFFIC ALERT: AVOID DOWNTOWN >>> ',
+  'eCOLA: DELICIOUSLY INFECTIOUS >>> VICE CITY PD: CRIME DOWN 0.1% >>> LOTTERY JACKPOT: $69M >>> ',
+];
+
+export function makeSignTexture(text, bgColor = '#111', textColor = '#fff', width = 256, height = 64) {
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  // Background
+  ctx.fillStyle = bgColor;
+  ctx.fillRect(0, 0, width, height);
+  // Border glow
+  ctx.strokeStyle = textColor;
+  ctx.lineWidth = 2;
+  ctx.strokeRect(2, 2, width - 4, height - 4);
+  // Text
+  const fontSize = Math.min(height * 0.55, width / (text.length * 0.55));
+  ctx.font = `bold ${fontSize}px Arial, sans-serif`;
+  ctx.fillStyle = textColor;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, width / 2, height / 2);
+  const tex = new THREE.CanvasTexture(canvas);
+  return tex;
+}
+
+export function makeScrollingSignTexture(text, bgColor = '#111', textColor = '#0ff') {
+  const canvas = document.createElement('canvas');
+  canvas.width = 1024;
+  canvas.height = 64;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = bgColor;
+  ctx.fillRect(0, 0, 1024, 64);
+  ctx.font = 'bold 40px Arial, sans-serif';
+  ctx.fillStyle = textColor;
+  ctx.textBaseline = 'middle';
+  // Repeat text across the full width for seamless scrolling
+  const fullText = (text + '     ').repeat(6);
+  ctx.fillText(fullText, 10, 32);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.ClampToEdgeWrapping;
+  return tex;
+}
+
 export function clampToBlock(bx, bz, bw, bd, blockCenterX, blockCenterZ) {
   const minX = Math.max(bx - bw / 2, blockCenterX - BLOCK / 2 + 1);
   const maxX = Math.min(bx + bw / 2, blockCenterX + BLOCK / 2 - 1);
@@ -71,6 +138,17 @@ function getPooledBuildingMat(color) {
   return buildingMatPool.get(key);
 }
 
+// Edge highlight material (shared, subtle bright strip for building corners)
+const edgeMat = new THREE.MeshStandardMaterial({ color: 0xcccccc, roughness: 0.5, metalness: 0.2 });
+
+// Helper: darken a hex color by a factor (0-1)
+function darkenColor(color, factor) {
+  const r = Math.max(0, ((color >> 16) & 0xff) * (1 - factor)) | 0;
+  const g = Math.max(0, ((color >> 8) & 0xff) * (1 - factor)) | 0;
+  const b = Math.max(0, (color & 0xff) * (1 - factor)) | 0;
+  return (r << 16) | (g << 8) | b;
+}
+
 // Door materials (module-scope, shared across all buildings)
 const doorDarkMat = new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.5 });
 const doorFrameMat = new THREE.MeshStandardMaterial({ color: 0x888888, roughness: 0.6 });
@@ -81,12 +159,27 @@ const doorGlassMat = new THREE.MeshStandardMaterial({
 const awningColors = [0xcc3333, 0x3366cc, 0x33aa55, 0xccaa33, 0x9933cc];
 
 export function addBuilding(cx, cz, w, h, d, color, useWindows, castSh) {
-  const mat = useWindows
-    ? new THREE.MeshStandardMaterial({ color, map: makeWindowTexture(w, h), roughness: 0.8 })
-    : getPooledBuildingMat(color);
-  const roofMat = useWindows ? new THREE.MeshStandardMaterial({ color, roughness: 0.9 }) : null;
+  let mats;
+  if (useWindows) {
+    // Per-face variation: front (lit), sides (medium shadow), back (deep shadow)
+    const frontMat = new THREE.MeshStandardMaterial({ color, map: makeWindowTexture(w, h, 0), roughness: 0.8 });
+    const sideMat = new THREE.MeshStandardMaterial({ color: darkenColor(color, 0.15), map: makeWindowTexture(w, h, 0.12), roughness: 0.82 });
+    const backMat = new THREE.MeshStandardMaterial({ color: darkenColor(color, 0.25), map: makeWindowTexture(w, h, 0.2), roughness: 0.85 });
+    const roofMat = new THREE.MeshStandardMaterial({ color: darkenColor(color, 0.1), roughness: 0.9 });
+    // BoxGeometry face order: +X, -X, +Y, -Y, +Z, -Z
+    mats = [sideMat, sideMat, roofMat, roofMat, frontMat, backMat];
+  } else {
+    // Non-windowed: per-face color variation for depth
+    const frontMat = getPooledBuildingMat(color);
+    const sideColor = darkenColor(color, 0.12);
+    const sideMat = getPooledBuildingMat(sideColor);
+    const backColor = darkenColor(color, 0.2);
+    const backMat = getPooledBuildingMat(backColor);
+    const roofColor = darkenColor(color, 0.08);
+    const roofMat = getPooledBuildingMat(roofColor);
+    mats = [sideMat, sideMat, roofMat, roofMat, frontMat, backMat];
+  }
   const geo = new THREE.BoxGeometry(w, h, d);
-  const mats = useWindows ? [mat, mat, roofMat, roofMat, mat, mat] : mat;
   const mesh = new THREE.Mesh(geo, mats);
   mesh.position.set(cx, h / 2, cz);
   mesh.castShadow = castSh !== false;
@@ -94,9 +187,25 @@ export function addBuilding(cx, cz, w, h, d, color, useWindows, castSh) {
   scene.add(mesh);
   state.buildingMeshes.push(mesh);
 
-  // Auto-register non-windowed buildings for geometry merging
-  if (!useWindows) {
-    registerStaticMesh(mesh, mat);
+  // Note: multi-material buildings (both windowed and non-windowed) cannot be
+  // merged via registerStaticMesh, but they benefit from per-face shading.
+
+  // Edge/corner highlights — thin bright strips along vertical edges
+  if (h > 10) {
+    const stripW = 0.15;
+    const stripGeo = new THREE.BoxGeometry(stripW, h, stripW);
+    const corners = [
+      [cx - w / 2, cz - d / 2],
+      [cx + w / 2, cz - d / 2],
+      [cx - w / 2, cz + d / 2],
+      [cx + w / 2, cz + d / 2],
+    ];
+    for (const [ex, ez] of corners) {
+      const strip = new THREE.Mesh(stripGeo, edgeMat);
+      strip.position.set(ex, h / 2, ez);
+      scene.add(strip);
+      registerStaticMesh(strip, edgeMat);
+    }
   }
 
   // ── Door at ground level on +Z face ──────────────────────────────────

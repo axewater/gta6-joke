@@ -99,8 +99,17 @@ export async function createTrafficLights() {
       const initialPhase = ((row + col) % 2 === 0) ? 0 : 2;
       const initialTimer = ((row * 3 + col * 7) % 10) / 10 * TRAFFIC_GREEN_TIME;
 
+      // Collision AABB for destructible pole
+      const aabb = {
+        minX: px - 0.2, maxX: px + 0.2,
+        minZ: pz - 0.2, maxZ: pz + 0.2,
+        height: 7, destroyed: false
+      };
+      state.buildings.push(aabb);
+
       const tl = {
         row, col, x: ix, z: iz,
+        px, pz, group, aabb,
         phase: initialPhase, // 0=NS green, 1=NS yellow, 2=EW green, 3=EW yellow
         timer: initialTimer,
         nsRed: [nsRed, nsRedB],
@@ -109,6 +118,13 @@ export async function createTrafficLights() {
         ewRed: [ewRed, ewRedB],
         ewYellow: [ewYellow, ewYellowB],
         ewGreen: [ewGreen, ewGreenB],
+        // Destruction state
+        damaged: false,     // tilted from light hit
+        destroyed: false,   // fully wrecked from hard hit
+        tiltAngle: 0,       // current tilt (radians)
+        fallTimer: 0,
+        fallDirX: 0,
+        fallDirZ: 0,
       };
 
       state.trafficLights.push(tl);
@@ -119,6 +135,7 @@ export async function createTrafficLights() {
 
 export function updateTrafficLights(dt) {
   for (const tl of state.trafficLights) {
+    if (tl.destroyed) continue;
     tl.timer += dt;
 
     const phaseDur = (tl.phase === 0 || tl.phase === 2) ? TRAFFIC_GREEN_TIME : TRAFFIC_YELLOW_TIME;

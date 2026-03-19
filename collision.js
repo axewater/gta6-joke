@@ -69,7 +69,7 @@ export function checkPlayerCarNpcCollision() {
   }
 }
 
-// ── Street Light Destruction ───────────────────────────────────────────
+// ── Street Light & Traffic Light Destruction ──────────────────────────
 export function checkStreetLightCollision() {
   if (!state.isInVehicle) return;
   const v = state.currentVehicle;
@@ -77,38 +77,106 @@ export function checkStreetLightCollision() {
   const speed = Math.abs(v.speed);
   if (speed < 3) return;
 
+  // Street lights
   for (const sl of state.streetLights) {
     if (sl.destroyed) continue;
     const dx = sl.x - v.x;
     const dz = sl.z - v.z;
     const dist = Math.sqrt(dx * dx + dz * dz);
     if (dist < v.halfW + 0.5) {
-      sl.destroyed = true;
-      sl.aabb.destroyed = true;
-      // Fall in the direction the car is moving
-      sl.fallDirX = Math.sin(v.rotation);
-      sl.fallDirZ = Math.cos(v.rotation);
-      sl.fallTimer = 0;
-      v.speed *= 0.85;
-      state.cameraShake.intensity = 0.4;
-      state.cameraShake.timer = 0.2;
+      if (!sl.damaged && speed < 10) {
+        // Light hit — tilt but don't break
+        sl.damaged = true;
+        sl.tiltAngle = 0.3 + Math.random() * 0.2;
+        sl.fallDirX = Math.sin(v.rotation);
+        sl.fallDirZ = Math.cos(v.rotation);
+        v.speed *= 0.9;
+        state.cameraShake.intensity = 0.3;
+        state.cameraShake.timer = 0.15;
+      } else {
+        // Hard hit — break and fall
+        sl.destroyed = true;
+        sl.aabb.destroyed = true;
+        sl.fallDirX = Math.sin(v.rotation);
+        sl.fallDirZ = Math.cos(v.rotation);
+        sl.fallTimer = 0;
+        v.speed *= 0.85;
+        state.cameraShake.intensity = 0.5;
+        state.cameraShake.timer = 0.25;
+      }
+    }
+  }
+
+  // Traffic lights
+  for (const tl of state.trafficLights) {
+    if (tl.destroyed) continue;
+    const dx = tl.px - v.x;
+    const dz = tl.pz - v.z;
+    const dist = Math.sqrt(dx * dx + dz * dz);
+    if (dist < v.halfW + 0.4) {
+      if (!tl.damaged && speed < 10) {
+        // Light hit — tilt but don't break
+        tl.damaged = true;
+        tl.tiltAngle = 0.25 + Math.random() * 0.2;
+        tl.fallDirX = Math.sin(v.rotation);
+        tl.fallDirZ = Math.cos(v.rotation);
+        v.speed *= 0.9;
+        state.cameraShake.intensity = 0.3;
+        state.cameraShake.timer = 0.15;
+      } else {
+        // Hard hit — break and fall
+        tl.destroyed = true;
+        tl.aabb.destroyed = true;
+        tl.fallDirX = Math.sin(v.rotation);
+        tl.fallDirZ = Math.cos(v.rotation);
+        tl.fallTimer = 0;
+        v.speed *= 0.8;
+        state.cameraShake.intensity = 0.6;
+        state.cameraShake.timer = 0.3;
+        applyVehicleDamage(v, 5);
+      }
     }
   }
 }
 
 export function updateFallingLights(dt) {
+  // Street lights
   for (const sl of state.streetLights) {
+    if (sl.damaged && !sl.destroyed) {
+      // Animate tilt smoothly
+      const targetX = sl.fallDirZ * sl.tiltAngle;
+      const targetZ = -sl.fallDirX * sl.tiltAngle;
+      sl.group.rotation.x += (targetX - sl.group.rotation.x) * Math.min(1, dt * 5);
+      sl.group.rotation.z += (targetZ - sl.group.rotation.z) * Math.min(1, dt * 5);
+      continue;
+    }
     if (!sl.destroyed || sl.fallTimer > 2) continue;
     sl.fallTimer += dt;
-    const t = Math.min(sl.fallTimer / 0.8, 1); // 0.8s to fall
+    const t = Math.min(sl.fallTimer / 0.8, 1);
     const angle = t * Math.PI / 2;
-    // Rotate around base toward fall direction
     sl.group.rotation.x = sl.fallDirZ * angle;
     sl.group.rotation.z = -sl.fallDirX * angle;
-    // Fade out light
     if (sl.pointLight.intensity > 0.01) {
       sl.pointLight.intensity *= 0.92;
     }
+  }
+
+  // Traffic lights
+  for (const tl of state.trafficLights) {
+    if (tl.damaged && !tl.destroyed) {
+      // Animate tilt smoothly
+      const targetX = tl.fallDirZ * tl.tiltAngle;
+      const targetZ = -tl.fallDirX * tl.tiltAngle;
+      tl.group.rotation.x += (targetX - tl.group.rotation.x) * Math.min(1, dt * 5);
+      tl.group.rotation.z += (targetZ - tl.group.rotation.z) * Math.min(1, dt * 5);
+      continue;
+    }
+    if (!tl.destroyed || tl.fallTimer > 2) continue;
+    tl.fallTimer += dt;
+    const t = Math.min(tl.fallTimer / 0.8, 1);
+    const angle = t * Math.PI / 2;
+    tl.group.rotation.x = tl.fallDirZ * angle;
+    tl.group.rotation.z = -tl.fallDirX * angle;
   }
 }
 
